@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pretends to be Java for tests: answers -version, otherwise runs fake_mc.py
+for a in "$@"; do
+  if [ "$a" = "-version" ]; then
+    echo 'openjdk version "21.0.2" 2024-01-16' >&2
+    exit 0
+  fi
+done
+exec python3 "$(dirname "$0")/fake_mc.py"
