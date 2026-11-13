@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+build/
+dist/
+dist-installer/
+frontend/preview.html
+docs/refs/
+*.log
