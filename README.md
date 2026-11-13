@@ -30,20 +30,19 @@ No need to switch between multiple tools. Manage your Minecraft server through a
 
 Choose how you want to use Zighost.
 
-### 📥 Option 1: Download and Install
+## 📥 Option 1: Download and Install
 
-<badge color="success">Recommended for users</badge>
+**Recommended for users**
 
 Want to use Zighost without dealing with code? Simply download the Windows installer.
 
-1. Visit the [Latest Release]([YOUR-RELEASE-REPO-UR](https://github.com/Shubhamkeshri433)).
+1. Visit the [Latest Release](https://github.com/Shubhamkeshri433/Zighost/releases).
 2. Download the **Zighost Setup.exe** file.
 3. Run the downloaded installer.
 4. Follow the installation instructions.
 5. Launch Zighost from your Desktop shortcut or Windows Start Menu.
 
 That's it! You're ready to manage your Minecraft server.
-
 ### 💻 Option 2: Clone the Repository
 
 <badge color="info">For developers</badge>
