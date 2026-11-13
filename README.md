@@ -36,7 +36,7 @@ Choose how you want to use Zighost.
 
 Want to use Zighost without dealing with code? Simply download the Windows installer.
 
-1. Visit the [Latest Release](YOUR-RELEASE-REPO-URL).
+1. Visit the [Latest Release]([YOUR-RELEASE-REPO-UR](https://github.com/Shubhamkeshri433)).
 2. Download the **Zighost Setup.exe** file.
 3. Run the downloaded installer.
 4. Follow the installation instructions.
