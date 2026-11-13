@@ -34,6 +34,9 @@ jobs:
         run: |
           if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
 
+      - name: Build app and installer
+        run: python tools/build_windows.py
+
       - name: Read the version from backend/brand.py
         id: v
         shell: pwsh
