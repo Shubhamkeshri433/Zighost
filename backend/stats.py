@@ -29,7 +29,16 @@ def _post(path: str, payload: dict) -> bool:
 
 
 def windows_text() -> str:
-    return f"Windows {platform.release()} ({platform.version()})" if platform.system() == "Windows" else platform.system()
+    if platform.system() != "Windows":
+        return platform.system()
+    version = platform.version()
+    try:
+        build = int(version.split(".")[-1])
+    except ValueError:
+        build = 0
+    # Python reports Windows 11 24H2 as "2025Server", so name it from the build number instead.
+    name = "11" if build >= 22000 else "10" if build >= 10240 else platform.release()
+    return f"Windows {name} ({version})"
 
 
 def tick() -> None:
