@@ -241,6 +241,7 @@ async function init() {
   await poll();
   fromHash();
   await Privacy.ensure();
+  Updates.bar();
   setInterval(() => { if (!document.hidden) poll(); }, 1500);
 }
 init();

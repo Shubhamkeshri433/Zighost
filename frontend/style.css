@@ -487,3 +487,11 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 900px) { .gate-points { grid-template-columns: 1fr; } .gate-row > div { grid-template-columns: 1fr; } }
 @media (max-width: 1180px) { .support-btn { padding: 7px 10px; font-size: 0; gap: 0; } .support-btn .ico { margin: 0; } }
 @media (max-width: 1100px) { .topbar { gap: 8px; padding: 10px 16px; } }
+
+.update-bar { display: flex; align-items: center; gap: 12px; padding: 8px 20px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 14px; }
+.update-bar[hidden] { display: none; }
+.update-bar .ico { color: var(--primary); flex: none; }
+.report-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 4px; }
+.report-fields input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; min-width: 0; }
+.notes { max-height: 160px; overflow: auto; white-space: pre-wrap; font: 12px var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin: 8px 0 0; }
+@media (max-width: 900px) { .report-fields { grid-template-columns: 1fr; } }

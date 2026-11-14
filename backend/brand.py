@@ -10,7 +10,9 @@ PUBLISHER = "shubverser"               # brand / publisher
 PUBLISHER_NAME = "Shubham Keshri"      # legal person behind the publisher
 COPYRIGHT = "© 2026 Shubham Keshri"
 SUPPORT_EMAIL = "zighost.support@gmail.com"   # privacy questions, bug reports, data requests
-POLICY_VERSION = 1                     # raise when the privacy policy changes in a way people must accept again
+POLICY_VERSION = 2                     # raise when the privacy policy changes in a way people must accept again
+REPO = "Shubhamkeshri433/Zighost"       # public repo whose Releases hold the installers (update check reads it)
+STATS_URL = "https://zighost-stats.zighost-support.workers.dev"                         # Cloudflare Worker address, e.g. "https://zighost-stats.<name>.workers.dev". Empty = stats and report sending are off
 TAGLINE = "Host Minecraft servers on your own PC."
 
 DATA_KEY = "zighost"                   # data folder name and instance id: NEVER change

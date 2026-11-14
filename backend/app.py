@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import threading
 import functools
 import json
 import logging
@@ -18,7 +19,7 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Respon
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import brand, consent, instance, support, paths, winmon, winos, backups, fsops, heads, java_rt, mcping, notify, openfolder, players, plugins, providers, servericon
+from . import brand, consent, instance, stats, support, updates, paths, winmon, winos, backups, fsops, heads, java_rt, mcping, notify, openfolder, players, plugins, providers, servericon
 from .manager import ManagerError, manager
 from .playit import PlayitError, playit
 from .props import clean_props, read_props, write_props
@@ -144,24 +145,51 @@ async def put_windows(request):
 
 @api
 async def get_consent(request):
-    return consent.get()
+    c = consent.get()
+    if c["accepted"] and c["stats"]:
+        consent.install_id()                    # makes the usage number the first time, so Support > About can show it
+        c = consent.get()
+    return c
 
 
 @api
 async def put_consent(request):
     d = await body(request)
     if d.get("accept"):
-        return consent.accept(bool(d.get("heads")))
-    if "heads" in d:
+        return consent.accept(bool(d.get("heads")), bool(d.get("updates", True)), bool(d.get("stats", True)))
+    keys = [k for k in consent.OPTIONS if k in d]
+    if keys:
         if not consent.get()["accepted"]:
             raise ManagerError("Accept the privacy policy first.")
-        return consent.set_heads(bool(d["heads"]))
+        for k in keys:
+            consent.set_option(k, bool(d[k]))
+        if "stats" in d:
+            await run_in_threadpool(stats.tick)          # tell the Worker to forget the id right away when switched off
+        return consent.get()
     raise ManagerError("Nothing to change.")
 
 
 @api
+async def get_update(request):
+    return await run_in_threadpool(updates.check, request.query_params.get("force") == "1")
+
+
+@api
+async def post_send_report(request):
+    d = await body(request)
+    text = str(d.get("text") or "")
+    if not text.strip():
+        raise ManagerError("There is nothing to send.")
+    try:
+        await run_in_threadpool(stats.send_report, text, str(d.get("note") or ""), str(d.get("contact") or ""))
+    except RuntimeError as e:
+        raise ManagerError(str(e))
+    return {"ok": True}
+
+
+@api
 async def get_support_report(request):
-    return {"text": await run_in_threadpool(support.report)}
+    return {"text": await run_in_threadpool(support.report), "can_send": stats.configured()}
 
 
 @api
@@ -775,6 +803,21 @@ def _fanout(kind, text):
     monitor.event(kind, text)
 
 
+_stop_housekeeping = threading.Event()
+
+
+def _housekeeping(stop: threading.Event) -> None:
+    """Every few hours: refresh the update check and send the daily anonymous message if the person allowed it."""
+    stop.wait(20)                                       # let the app finish starting
+    while not stop.is_set():
+        try:
+            updates.check()
+            stats.tick()
+        except Exception:  # noqa: BLE001
+            pass
+        stop.wait(4 * 3600)
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app):
     ensure_dirs()
@@ -782,7 +825,10 @@ async def lifespan(app):
     manager.on_event = _fanout
     scheduler.start()
     monitor.start()
+    housekeeping = threading.Thread(target=_housekeeping, args=(_stop_housekeeping,), daemon=True, name="housekeeping")
+    housekeeping.start()
     yield
+    _stop_housekeeping.set()
     monitor.stop()
     scheduler.stop()
     await run_in_threadpool(manager.shutdown)
@@ -798,6 +844,8 @@ routes = [
     Route("/api/consent", get_consent, methods=["GET"]),
     Route("/api/consent", put_consent, methods=["PUT"]),
     Route("/api/support/report", get_support_report, methods=["GET"]),
+    Route("/api/support/send", post_send_report, methods=["POST"]),
+    Route("/api/update", get_update, methods=["GET"]),
     Route("/api/components", get_components, methods=["GET"]),
     Route("/api/components/prepare", post_components, methods=["POST"]),
     Route("/api/windows", get_windows, methods=["GET"]),

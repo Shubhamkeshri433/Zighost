@@ -25,7 +25,7 @@ class Consent(unittest.TestCase):
 
     def test_new_policy_version_asks_again(self):
         consent.accept()
-        with mock.patch.object(brand, "POLICY_VERSION", 2):
+        with mock.patch.object(brand, "POLICY_VERSION", brand.POLICY_VERSION + 1):
             self.assertFalse(consent.get()["accepted"])
 
 

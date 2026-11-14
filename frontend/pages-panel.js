@@ -13,6 +13,7 @@ Pages.panel = {
     if (!S.sys) { try { S.sys = await api('/api/system'); } catch { /* shown by the banner */ } }
     try { this.win = await api('/api/windows'); } catch { this.win = null; }
     try { await Privacy.load(); } catch { /* card shows defaults */ }
+    if (!Updates.info) await Updates.check(false);
     this.draw();
   },
 
@@ -78,6 +79,7 @@ Pages.panel = {
       h('section', { class: 'card', style: 'margin-bottom:14px' }, h('div', { class: 'card-h' }, h('h2', { text: 'Appearance' })), themes),
       form,
       this.windowsCard(),
+      Updates.card(),
       Privacy.card(),
       h('section', { class: 'card', style: 'margin-top:14px' }, h('div', { class: 'card-h' }, h('h2', { text: 'This PC and this panel' }), h('button', { class: 'btn small', type: 'button', onclick: e => busy(e.currentTarget, () => api('/api/open-folder', { method: 'POST', json: { which: 'data' } })) }, ico('files'), 'Open data folder')),
         h('dl', { class: 'summary' }, fact('Panel version', S.st.version), fact('Memory', y.ram_total_mb ? `${(y.ram_total_mb / 1024).toFixed(1)} GB` : '-'),
