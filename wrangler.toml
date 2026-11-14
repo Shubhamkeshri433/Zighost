@@ -1,0 +1,12 @@
+# Optional: only needed if you deploy with the wrangler command instead of the Cloudflare dashboard.
+name = "zighost-stats"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+REPO = "Shubhamkeshri433/Zighost"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "zighost-stats"
+database_id = "PASTE-THE-ID-FROM-CLOUDFLARE"
