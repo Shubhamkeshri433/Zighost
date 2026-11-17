@@ -32,7 +32,7 @@ const POLICY = {
       'Send report (only when you press Send in Support): the text you see in the box is sent, and nothing else. It has the version, Windows version, Java status and the last lines of the app log. You can edit or delete anything in the box first, and add an email address if you want a reply. The app log can contain a server name or a player name, so read it before you send.',
     ] },
     { h: 'What is never done', p: [
-      'No advertising, no tracking of what you do inside the app, and no automatic crash reports. Apart from the check for new versions, which sends nothing about you, nothing goes to the developer unless you press Send. Earlier test versions could send one anonymous usage message a day. That has been removed.',
+      'No advertising, no tracking of what you do inside the app, and no automatic crash reports. Apart from the check for new versions, which sends nothing about you, nothing goes to the developer unless you press Send.',
       'The support report can also just be copied to your clipboard. It leaves out your Windows user name and your secrets either way.',
     ] },
     { h: 'Your choices', p: [
