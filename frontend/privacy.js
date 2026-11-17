@@ -33,11 +33,11 @@ const Privacy = {
           h('p', { class: 'lead', text: `${BRAND.tagline} Before you start, here is what ${BRAND.name} does with your data. It is short.` }),
           h('div', { class: 'gate-points' },
             gatePoint('shield', 'Everything stays on your PC', `No account. Your servers, worlds and player names are never sent to ${BRAND.publisher}. Your worlds and settings live in your Windows user folder.`),
-            gatePoint('network', 'It goes online only to get things', 'Minecraft files, Java, plugins and mods, new versions from GitHub, and the public address from playit.gg. It also sends one anonymous usage message a day. All of it is listed in the policy.'),
+            gatePoint('network', 'It goes online only to get things', 'Minecraft files, Java, plugins and mods, new versions from GitHub, and the public address from playit.gg. Nothing is counted or tracked. All of it is listed in the policy.'),
             gatePoint('settings', 'You stay in control', 'Optional things, like Discord notices and player heads, stay off until you switch them on. You can delete your data at any time.')),
-          h('details', { class: 'gate-policy' }, h('summary', { text: 'Read the full privacy policy' }), policyView())),
+          h('details', { class: 'gate-policy' }, h('summary', { text: 'Read the full privacy policy and terms' }), policyView())),
         h('div', { class: 'modal-foot gate-foot' },
-          h('label', { class: 'check', for: 'g-accept' }, accept, h('span', { text: 'I have read and accept the privacy policy.' })),
+          h('label', { class: 'check', for: 'g-accept' }, accept, h('span', { text: 'I have read and accept the privacy policy and terms of use.' })),
           h('label', { class: 'check', for: 'g-heads' }, heads, h('span', {}, 'Show player head pictures. ', h('span', { class: 'hint', text: 'Optional. Sends player names to minotar.net and mc-heads.net.' }))),
           h('span', { class: 'grow' }), go));
     };
@@ -74,7 +74,7 @@ const Privacy = {
 
   /* Panel settings card: read the policy, change the optional switches. */
   card(onChange) {
-    const c = this.state || { accepted: false, heads: false, updates: true, stats: false, accepted_at: 0 };
+    const c = this.state || { accepted: false, heads: false, updates: true, accepted_at: 0 };
     const sw = (key, title, hint) => [
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c[key], onchange: e => {
         const on = e.target.checked;
@@ -82,17 +82,17 @@ const Privacy = {
       } }), h('span', { text: title })),
       h('p', { class: 'hint', style: 'margin:-6px 0 12px 28px', text: hint })];
     return h('section', { class: 'card', style: 'margin-top:14px' }, h('div', { class: 'card-h' }, h('h2', { text: 'Privacy' })),
-      h('p', { class: 'hint', style: 'margin-top:0', text: c.accepted_at ? `You accepted the privacy policy on ${fmtDate(c.accepted_at)}. The developer only gets the daily anonymous usage message described in the policy, and a report if you press Send in Support.` : 'Read the policy to see what is sent.' }),
+      h('p', { class: 'hint', style: 'margin-top:0', text: c.accepted_at ? `You accepted the privacy policy and terms on ${fmtDate(c.accepted_at)}. Nothing is counted or tracked. The developer only gets a report if you press Send in Support.` : 'Read the policy to see what is sent.' }),
       ...sw('heads', 'Show player head pictures', 'Sends player names to minotar.net and mc-heads.net. When off, a simple drawn face is shown.'),
       h('div', { class: 'row-actions' },
-        h('button', { class: 'btn', type: 'button', onclick: () => this.readPolicy() }, ico('shield'), 'Read privacy policy'),
+        h('button', { class: 'btn', type: 'button', onclick: () => this.readPolicy() }, ico('shield'), 'Read privacy policy and terms'),
         h('button', { class: 'btn', type: 'button', onclick: () => busy(null, () => api('/api/open-folder', { method: 'POST', json: { which: 'data' } })) }, ico('files'), 'Open my data folder')));
   },
 
   readPolicy() {
     const body = h('div', { class: 'modal-body' }, policyView());
     const m = Modal.open(h('div', { class: 'gate' },
-      h('div', { class: 'modal-head' }, h('h2', { text: 'Privacy policy' }), h('span', { class: 'grow' }), h('button', { class: 'btn', type: 'button', onclick: () => m.close() }, 'Close')), body), { label: 'Privacy policy' });
+      h('div', { class: 'modal-head' }, h('h2', { text: 'Privacy policy and terms' }), h('span', { class: 'grow' }), h('button', { class: 'btn', type: 'button', onclick: () => m.close() }, 'Close')), body), { label: 'Privacy policy and terms' });
   },
 };
 
@@ -154,8 +154,6 @@ const Support = {
       toast('Report sent. Thank you.', 'ok');
     }) }, ico('arrow'), 'Send to developer');
     const sendHint = h('p', { class: 'hint' });
-    const usage = h('p', { class: 'hint' });
-    api('/api/consent').then(c => { if (c.usage_id) usage.textContent = `Usage number: ${c.usage_id}. Email it to us if you want it deleted.`; }).catch(() => {});
     const area = h('div', { class: 'report-area', hidden: true },
       h('p', { class: 'hint', text: 'This is exactly what will be sent or copied. Edit or delete anything you do not want to share.' }), box,
       h('div', { class: 'report-fields' }, note, contact),
@@ -185,8 +183,7 @@ const Support = {
         area,
         h('h3', { text: `About ${BRAND.name}` }),
         h('p', { class: 'hint', text: `Version ${BRAND.version}. Made by ${BRAND.publisher} (${BRAND.publisherName}). ${BRAND.copyright}.` }),
-        usage,
         h('div', { class: 'row-actions' },
-          h('button', { class: 'btn', type: 'button', onclick: () => { m.close(); Privacy.readPolicy(); } }, ico('shield'), 'Privacy policy')))), { label: 'Support' });
+          h('button', { class: 'btn', type: 'button', onclick: () => { m.close(); Privacy.readPolicy(); } }, ico('shield'), 'Privacy policy and terms')))), { label: 'Support' });
   },
 };

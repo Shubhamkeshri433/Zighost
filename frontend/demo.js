@@ -3,7 +3,7 @@
 (() => {
   const now = () => Math.floor(Date.now() / 1000);
   const D = {
-    consent: { accepted: true, version: 2, current: 2, accepted_at: now() - 86400, heads: false, updates: true, stats: true, usage_id: 'preview-0000-0000-0000' },
+    consent: { accepted: true, version: 3, current: 3, accepted_at: now() - 86400, heads: false, updates: true },
     comp: { running: false, java: { state: 'missing', percent: 0, text: '' }, playit: { state: 'missing', percent: 0, text: '' } },
     win: { autostart: false, keep_awake: true, toasts: true },
     state: 'online', started: now() - 1860, active: 'a1b2c3d4', players: ['Aarav', 'CreeperKing', 'Steve_Rao'],
@@ -113,7 +113,7 @@
     if (p === '/api/system') return { platform: 'win32', ram_total_mb: 16384, cpus: 8, disk_free_gb: 120, git: false, types: TYPES, version: '0.1.0', data_dir: 'C:\\Users\\you\\AppData\\Roaming\\zighost' };
     if (p === '/api/versions') return { versions: ['1.21.4', '1.21.3', '1.21.1', '1.20.6', '1.20.4', '1.19.4', '1.18.2', '1.16.5'] };
     if (p === '/api/windows') { if (method === 'PUT') Object.assign(D.win, json || {}); return { available: true, ...D.win }; }
-    if (p === '/api/consent') { if (method === 'PUT') { if (json.accept) Object.assign(D.consent, { accepted: true, heads: !!json.heads, updates: true, stats: true, accepted_at: now() }); else for (const k of ['heads', 'updates', 'stats']) if (k in json) D.consent[k] = !!json[k]; } return { ...D.consent }; }
+    if (p === '/api/consent') { if (method === 'PUT') { if (json.accept) Object.assign(D.consent, { accepted: true, heads: !!json.heads, updates: true, accepted_at: now() }); else for (const k of ['heads', 'updates']) if (k in json) D.consent[k] = !!json[k]; } return { ...D.consent }; }
     if (p === '/api/support/report') return { text: 'Zighost 0.1.0 (preview)\nWindows/OS: Windows-11\nJava: Java 21\n\n--- last log lines ---\n(preview)', can_send: true };
     if (p === '/api/support/send') return { ok: true };
     if (p === '/api/update') return { enabled: D.consent.updates, current: '0.1.0', latest: '0.2.0', available: true, url: 'https://github.com/', file: '', notes: 'Preview notes:\n- Faster start\n- Fixes', error: '', checked_at: now() };

@@ -5,7 +5,7 @@ from unittest import mock
 TMP = tempfile.mkdtemp()
 os.environ["ZIGHOST_DATA"] = TMP
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from backend import brand, consent, stats, updates
+from backend import brand, consent, reports, updates
 
 
 class Resp:
@@ -26,35 +26,35 @@ class Base(unittest.TestCase):
     def setUp(self):
         (Path(TMP) / "consent.json").unlink(missing_ok=True)
         updates._cache.update(at=0.0, data=None)
-        consent.accept(heads=False, updates=True, stats=False)
+        consent.accept(heads=False, updates=True)
 
 
 class Defaults(Base):
-    def test_accepting_policy_covers_update_check_and_daily_message(self):
+    def test_accepting_policy_covers_update_check_only(self):
         (Path(TMP) / "consent.json").unlink(missing_ok=True)
         consent.accept()
         c = consent.get()
-        self.assertTrue(c["updates"]); self.assertTrue(c["stats"])
-        self.assertEqual(len(consent.install_id()), 36); self.assertEqual(consent.install_id(), consent.get()["usage_id"])
+        self.assertTrue(c["updates"]); self.assertFalse(c["heads"])
+        self.assertNotIn("stats", c); self.assertNotIn("usage_id", c)
 
-    def test_no_id_before_accepting(self):
-        (Path(TMP) / "consent.json").unlink(missing_ok=True)
-        self.assertEqual(consent.install_id(), "")
+    def test_old_usage_number_is_deleted(self):
+        import json
+        f = Path(TMP) / "consent.json"
+        f.write_text(json.dumps({"version": brand.POLICY_VERSION, "install_id": "abc", "stats": True, "_forget_id": "x", "last_ping": 5}))
+        consent.get()
+        left = json.loads(f.read_text())
+        for k in ("install_id", "stats", "_forget_id", "last_ping"): self.assertNotIn(k, left)
+
+    def test_old_policy_version_must_be_accepted_again(self):
+        import json
+        (Path(TMP) / "consent.json").write_text(json.dumps({"version": 2}))
+        self.assertFalse(consent.get()["accepted"])
 
 
 class Options(Base):
     def test_defaults_after_accept(self):
         c = consent.get()
-        self.assertTrue(c["updates"]); self.assertFalse(c["stats"]); self.assertFalse(c["heads"])
-        self.assertEqual(consent.install_id(), "")
-
-    def test_stats_id_made_only_when_on_and_forgotten_when_off(self):
-        consent.set_option("stats", True)
-        iid = consent.install_id()
-        self.assertEqual(len(iid), 36)
-        consent.set_option("stats", False)
-        self.assertEqual(consent.install_id(), ""); self.assertEqual(consent.pending_forget(), iid)
-        consent.clear_forget(); self.assertEqual(consent.pending_forget(), "")
+        self.assertTrue(c["updates"]); self.assertFalse(c["heads"])
 
     def test_unknown_option(self):
         with self.assertRaises(ValueError): consent.set_option("nope", True)
@@ -105,43 +105,17 @@ class Updates(Base):
         self.assertEqual(g.call_count, 1)
 
 
-class Stats(Base):
-    def test_nothing_sent_without_worker_address(self):
-        consent.set_option("stats", True)
-        with mock.patch.object(brand, "STATS_URL", ""), mock.patch.object(stats.requests, "post") as p:
-            stats.tick()
-        p.assert_not_called()
-
-    def test_ping_once_a_day_and_only_with_consent(self):
-        with mock.patch.object(brand, "STATS_URL", "https://w.test"), mock.patch.object(stats.requests, "post", return_value=Resp(200)) as p:
-            stats.tick(); p.assert_not_called()                      # stats off
-            consent.set_option("stats", True)
-            stats.tick(); stats.tick()
-        self.assertEqual(p.call_count, 1)
-        url, kw = p.call_args[0][0], p.call_args[1]
-        self.assertEqual(url, "https://w.test/ping")
-        self.assertEqual(set(kw["json"]), {"id", "v", "os"})
-
-    def test_switching_off_tells_server_to_forget(self):
-        consent.set_option("stats", True); iid = consent.install_id()
-        consent.set_option("stats", False)
-        with mock.patch.object(brand, "STATS_URL", "https://w.test"), mock.patch.object(stats.requests, "post", return_value=Resp(200)) as p:
-            stats.tick()
-        self.assertEqual(p.call_args[0][0], "https://w.test/forget"); self.assertEqual(p.call_args[1]["json"], {"id": iid})
-        self.assertEqual(consent.pending_forget(), "")
-
-    def test_failed_ping_is_retried_later(self):
-        consent.set_option("stats", True)
-        with mock.patch.object(brand, "STATS_URL", "https://w.test"), mock.patch.object(stats.requests, "post", side_effect=OSError("offline")):
-            stats.tick()
-        self.assertEqual(consent.last_ping(), 0)
+class Reports(Base):
+    def test_no_background_sending(self):
+        self.assertFalse(hasattr(reports, "tick"))
+        self.assertFalse(hasattr(consent, "install_id"))
 
     def test_report_is_scrubbed_and_needs_worker(self):
-        with mock.patch.object(brand, "STATS_URL", ""):
-            with self.assertRaises(RuntimeError): stats.send_report("x")
+        with mock.patch.object(brand, "REPORTS_URL", ""):
+            with self.assertRaises(RuntimeError): reports.send_report("x")
         home = str(Path.home())
-        with mock.patch.object(brand, "STATS_URL", "https://w.test"), mock.patch.object(stats.requests, "post", return_value=Resp(200)) as p:
-            stats.send_report(f"log {home}/a secret=ABCDEFGHIJKLMNOP1234", note="n", contact="a@b.c")
+        with mock.patch.object(brand, "REPORTS_URL", "https://w.test"), mock.patch.object(reports.requests, "post", return_value=Resp(200)) as p:
+            reports.send_report(f"log {home}/a secret=ABCDEFGHIJKLMNOP1234", note="n", contact="a@b.c")
         sent = p.call_args[1]["json"]
         self.assertNotIn(home, sent["text"]); self.assertNotIn("ABCDEFGHIJKLMNOP1234", sent["text"])
         self.assertEqual(sent["contact"], "a@b.c")
@@ -155,15 +129,16 @@ class Api(Base):
         self.c = TestClient(app, base_url="http://127.0.0.1", headers={"X-MCPanel": "1"})
 
     def test_consent_options_and_update_endpoint(self):
-        r = self.c.put("/api/consent", json={"stats": True, "updates": False}).json()
-        self.assertTrue(r["stats"]); self.assertFalse(r["updates"])
+        r = self.c.put("/api/consent", json={"updates": False}).json()
+        self.assertFalse(r["updates"]); self.assertNotIn("stats", r)
+        self.assertEqual(self.c.put("/api/consent", json={"stats": True}).status_code, 400)
         self.assertFalse(self.c.get("/api/update?force=1").json()["enabled"])
 
     def test_send_report_validation(self):
         self.assertEqual(self.c.post("/api/support/send", json={"text": "  "}).status_code, 400)
-        with mock.patch.object(brand, "STATS_URL", ""):
+        with mock.patch.object(brand, "REPORTS_URL", ""):
             self.assertEqual(self.c.post("/api/support/send", json={"text": "hi"}).status_code, 400)
-        with mock.patch.object(brand, "STATS_URL", "https://w.test"), mock.patch.object(stats.requests, "post", return_value=Resp(200)):
+        with mock.patch.object(brand, "REPORTS_URL", "https://w.test"), mock.patch.object(reports.requests, "post", return_value=Resp(200)):
             self.assertEqual(self.c.post("/api/support/send", json={"text": "hi"}).json(), {"ok": True})
         self.assertIn("can_send", self.c.get("/api/support/report").json())
 

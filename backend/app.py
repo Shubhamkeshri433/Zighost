@@ -19,7 +19,7 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Respon
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import brand, consent, instance, stats, support, updates, paths, winmon, winos, backups, fsops, heads, java_rt, mcping, notify, openfolder, players, plugins, providers, servericon
+from . import brand, consent, instance, reports, support, updates, paths, winmon, winos, backups, fsops, heads, java_rt, mcping, notify, openfolder, players, plugins, providers, servericon
 from .manager import ManagerError, manager
 from .playit import PlayitError, playit
 from .props import clean_props, read_props, write_props
@@ -145,26 +145,20 @@ async def put_windows(request):
 
 @api
 async def get_consent(request):
-    c = consent.get()
-    if c["accepted"] and c["stats"]:
-        consent.install_id()                    # makes the usage number the first time, so Support > About can show it
-        c = consent.get()
-    return c
+    return consent.get()
 
 
 @api
 async def put_consent(request):
     d = await body(request)
     if d.get("accept"):
-        return consent.accept(bool(d.get("heads")), bool(d.get("updates", True)), bool(d.get("stats", True)))
+        return consent.accept(bool(d.get("heads")), bool(d.get("updates", True)))
     keys = [k for k in consent.OPTIONS if k in d]
     if keys:
         if not consent.get()["accepted"]:
             raise ManagerError("Accept the privacy policy first.")
         for k in keys:
             consent.set_option(k, bool(d[k]))
-        if "stats" in d:
-            await run_in_threadpool(stats.tick)          # tell the Worker to forget the id right away when switched off
         return consent.get()
     raise ManagerError("Nothing to change.")
 
@@ -181,7 +175,7 @@ async def post_send_report(request):
     if not text.strip():
         raise ManagerError("There is nothing to send.")
     try:
-        await run_in_threadpool(stats.send_report, text, str(d.get("note") or ""), str(d.get("contact") or ""))
+        await run_in_threadpool(reports.send_report, text, str(d.get("note") or ""), str(d.get("contact") or ""))
     except RuntimeError as e:
         raise ManagerError(str(e))
     return {"ok": True}
@@ -189,7 +183,7 @@ async def post_send_report(request):
 
 @api
 async def get_support_report(request):
-    return {"text": await run_in_threadpool(support.report), "can_send": stats.configured()}
+    return {"text": await run_in_threadpool(support.report), "can_send": reports.configured()}
 
 
 @api
@@ -807,12 +801,11 @@ _stop_housekeeping = threading.Event()
 
 
 def _housekeeping(stop: threading.Event) -> None:
-    """Every few hours: refresh the update check and send the daily anonymous message if the person allowed it."""
+    """Every few hours: refresh the update check. Nothing else is sent."""
     stop.wait(20)                                       # let the app finish starting
     while not stop.is_set():
         try:
             updates.check()
-            stats.tick()
         except Exception:  # noqa: BLE001
             pass
         stop.wait(4 * 3600)
