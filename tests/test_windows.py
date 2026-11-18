@@ -42,6 +42,42 @@ class Sealing(unittest.TestCase):
         p.unlink()
 
 
+class SealFailure(unittest.TestCase):
+    """A secret is never written in plain text when encryption fails."""
+
+    def test_seal_raises_on_windows_failure(self):
+        def broken(data, enc):
+            raise OSError("DPAPI failed")
+        with mock.patch.object(winos, "IS_WINDOWS", True), mock.patch.object(winos, "_dpapi", broken):
+            with self.assertRaises(winos.SealError):
+                winos.seal("secret")
+
+    def test_failed_save_writes_nothing_and_keeps_old_file(self):
+        def broken(data, enc):
+            raise OSError("DPAPI failed")
+        p = Path(store.DATA) / "settings.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"theme": "deepslate"}))
+        before = p.read_text()
+        with mock.patch.object(winos, "IS_WINDOWS", True), mock.patch.object(winos, "_dpapi", broken):
+            with self.assertRaises(store.SettingsError):
+                store.update_settings({"discord_webhook": "https://discord.com/api/webhooks/1/abc"})
+        self.assertEqual(p.read_text(), before)
+        self.assertNotIn("webhook", p.read_text())
+        p.unlink()
+
+    def test_old_plain_file_stays_when_migration_fails(self):
+        def broken(data, enc):
+            raise OSError("DPAPI failed")
+        p = Path(store.DATA) / "settings.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"playit_secret": "abc123"}))
+        with mock.patch.object(winos, "IS_WINDOWS", True), mock.patch.object(winos, "_dpapi", broken):
+            self.assertEqual(store.get_settings()["playit_secret"], "abc123")     # still readable, no crash
+        self.assertEqual(json.loads(p.read_text())["playit_secret"], "abc123")
+        p.unlink()
+
+
 class Mon(unittest.TestCase):
     def test_keep_awake_follows_server(self):
         awake = winos.KeepAwake()

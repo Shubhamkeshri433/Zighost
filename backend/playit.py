@@ -30,7 +30,7 @@ from pathlib import Path
 import requests
 
 from . import brand
-from .store import RUNTIME_DIR, get_settings, update_settings
+from .store import RUNTIME_DIR, SettingsError, get_settings, update_settings
 
 IS_WIN = sys.platform.startswith("win")
 NOWINDOW = 0x08000000 if IS_WIN else 0
@@ -430,7 +430,10 @@ class Playit:
                     ok, data, text = False, None, ""
                 key = data.get("secret_key") if isinstance(data, dict) else ""
                 if ok and key:
-                    update_settings({"playit_secret": str(key)})
+                    try:
+                        update_settings({"playit_secret": str(key)})
+                    except SettingsError as e:
+                        raise PlayitError(str(e)) from e
                     self.claim_url = ""
                     self.note("Linked to playit.gg.")
                     return str(key)

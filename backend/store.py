@@ -67,6 +67,10 @@ def _write_atomic(path: Path, data) -> None:
 
 # ---- settings -------------------------------------------------------------
 
+class SettingsError(Exception):
+    pass
+
+
 def _sealed(s: dict) -> dict:
     out = dict(s)
     for k in SECRET_KEYS:
@@ -80,7 +84,10 @@ def get_settings() -> dict:
         s = dict(DEFAULT_SETTINGS)
         s.update(raw)
         if winos.IS_WINDOWS and any(raw.get(k) and not str(raw[k]).startswith(winos.PREFIX) for k in SECRET_KEYS):
-            _write_atomic(DATA / "settings.json", _sealed(s))      # older plain-text file: encrypt it now
+            try:
+                _write_atomic(DATA / "settings.json", _sealed(s))      # older plain-text file: encrypt it now
+            except winos.SealError:
+                pass                                                  # keep the old file; it is tried again next time
         for k in SECRET_KEYS:
             s[k] = winos.unseal(str(s.get(k, "")))
         return s
@@ -103,7 +110,12 @@ def update_settings(changes: dict) -> dict:
             s["theme"] = "deepslate"
         if s["playit_mode"] not in ("managed", "external"):
             s["playit_mode"] = "managed"
-        _write_atomic(DATA / "settings.json", _sealed(s))
+        try:
+            sealed = _sealed(s)
+        except winos.SealError as e:
+            raise SettingsError("Could not encrypt your saved secrets (webhook or playit key). Nothing was saved. "
+                                "Try again, or remove the secret from Settings.") from e
+        _write_atomic(DATA / "settings.json", sealed)
         return s
 
 

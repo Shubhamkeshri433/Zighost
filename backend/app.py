@@ -24,14 +24,14 @@ from .manager import ManagerError, manager
 from .playit import PlayitError, playit
 from .props import clean_props, read_props, write_props
 from .scheduler import ScheduleError, Scheduler, clean_schedules
-from .store import (DATA, ensure_dirs, get_server, get_settings, list_servers, server_dir,
+from .store import (DATA, SettingsError, ensure_dirs, get_server, get_settings, list_servers, server_dir,
                     update_server, update_settings, valid_id)
 
 VERSION = brand.VERSION
 FRONTEND = paths.FRONTEND
 log = logging.getLogger("mcpanel")
 USER_ERRORS = (openfolder.OpenError, ManagerError, providers.ProviderError, backups.BackupError, java_rt.JavaError, PlayitError,
-               players.PlayerError, fsops.FsError, plugins.PluginError, ScheduleError, mcping.PingError)
+               players.PlayerError, fsops.FsError, plugins.PluginError, ScheduleError, mcping.PingError, SettingsError)
 
 
 class NoCacheStatic(StaticFiles):

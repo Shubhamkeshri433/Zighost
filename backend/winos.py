@@ -139,15 +139,20 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
         ctypes.windll.kernel32.LocalFree(out.pbData)
 
 
+class SealError(Exception):
+    """A secret could not be encrypted. Callers must not store it in plain text."""
+
+
 def seal(text: str) -> str:
-    """Encrypt for storage. Off Windows (or on failure) the text is stored as it is."""
+    """Encrypt for storage. Off Windows nothing can be encrypted, so the text is returned as it is (development only).
+    On Windows a failure raises SealError: a secret is never stored in plain text as a fallback."""
     if not text or text.startswith(PREFIX) or not IS_WINDOWS:
         return text
     try:
         return PREFIX + base64.b64encode(_dpapi(text.encode("utf-8"), True)).decode("ascii")
-    except OSError:
-        log.warning("could not encrypt a secret, keeping it as it is")
-        return text
+    except (OSError, ValueError) as e:
+        log.error("could not encrypt a secret, it was not saved")
+        raise SealError("The secret could not be encrypted, so it was not saved.") from e
 
 
 def unseal(text: str) -> str:
