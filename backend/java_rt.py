@@ -14,7 +14,7 @@ from typing import Callable
 
 import requests
 
-from . import brand
+from . import brand, verify
 from .store import RUNTIME_DIR, get_settings
 
 IS_WIN = sys.platform.startswith("win")
@@ -77,13 +77,31 @@ def find_java(required: int = 8, need_jdk: bool = False) -> tuple[str, int] | No
     return found[0][1], found[0][0]
 
 
+def _temurin_package(major: int, os_name: str, arch: str, image: str) -> tuple[str, tuple[str, str]]:
+    """The download link and the SHA-256 that Adoptium publishes for it. Without a published checksum nothing is downloaded."""
+    api = f"https://api.adoptium.net/v3/assets/latest/{major}/hotspot"
+    try:
+        r = requests.get(api, params={"architecture": arch, "image_type": image, "os": os_name, "vendor": "eclipse"},
+                         timeout=30, headers={"User-Agent": brand.USER_AGENT})
+        r.raise_for_status()
+        pkg = r.json()[0]["binary"]["package"]
+        link, sha = str(pkg["link"]), str(pkg["checksum"]).strip().lower()
+    except requests.RequestException as e:
+        raise JavaError("Could not look up Java. Check your internet connection.") from e
+    except (ValueError, KeyError, IndexError, TypeError) as e:
+        raise JavaError(f"Java {major} is not listed for this computer. Install Java {major} yourself and set its path in Settings.") from e
+    if not link.startswith("https://") or len(sha) != 64:
+        raise JavaError("The Java download could not be verified, so it was not downloaded.")
+    return link, ("sha256", sha)
+
+
 def install_java(major: int, jdk: bool, progress: Callable[[str, int], None]) -> str:
     """Download Temurin `major` into data/runtime. Returns path to java."""
     os_name = "windows" if IS_WIN else ("mac" if sys.platform == "darwin" else "linux")
     machine = platform.machine().lower()
     arch = "aarch64" if machine in ("arm64", "aarch64") else "x64"
     image = "jdk" if jdk else "jre"
-    url = f"https://api.adoptium.net/v3/binary/latest/{major}/ga/{os_name}/{arch}/{image}/hotspot/normal/eclipse"
+    url, expected = _temurin_package(major, os_name, arch, image)
     dest = RUNTIME_DIR / f"java-{major}-{image}"
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     archive = RUNTIME_DIR / f"java-{major}-{image}.download"
@@ -103,6 +121,11 @@ def install_java(major: int, jdk: bool, progress: Callable[[str, int], None]) ->
                         progress(f"Downloading Java {major}", int(got * 100 / total))
     except requests.RequestException as e:
         raise JavaError("Could not download Java. Check your internet connection.") from e
+    progress(f"Checking Java {major}", 100)
+    try:
+        verify.check(archive, expected, f"The Java {major} download")
+    except verify.VerifyError as e:
+        raise JavaError(str(e)) from e
     progress(f"Unpacking Java {major}", 100)
     if dest.exists():
         shutil.rmtree(dest)

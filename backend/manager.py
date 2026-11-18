@@ -19,7 +19,7 @@ import requests
 
 import shlex
 
-from . import java_rt, plugins, providers, servericon
+from . import java_rt, plugins, providers, servericon, verify
 from .props import DEFAULTS, clean_props, read_props, write_props
 from .store import (get_server, get_settings, remove_server, save_server,
                     server_dir, update_server, update_settings, new_server_id, backup_dir)
@@ -251,7 +251,7 @@ class Manager:
         need_java = providers.java_required(version)
         self.ensure_java(need_java, jdk=(info["kind"] == "buildtools"))
         if info["kind"] == "jar":
-            self._download(info["url"], d / "server.jar", "Downloading server")
+            self._download(info["url"], d / "server.jar", "Downloading server", expect=info.get("hash"))
         else:
             self._build_spigot(info["url"], version, d, need_java)
         (d / "eula.txt").write_text(f"# Accepted in {brand.NAME} when the server was created\neula=true\n", encoding="utf-8")
@@ -281,7 +281,8 @@ class Manager:
         self.log(f"Java {major} was not found. Downloading it (about 50 MB).")
         return java_rt.install_java(major, jdk, self._progress)
 
-    def _download(self, url: str, dest: Path, label: str) -> None:
+    def _download(self, url: str, dest: Path, label: str, expect: tuple[str, str] | None = None) -> None:
+        """expect = (algo, hex) from the publisher. Without one (the publisher lists none) the console says so; it is never silent."""
         part = dest.with_suffix(dest.suffix + ".part")
         try:
             with requests.get(url, stream=True, timeout=30, allow_redirects=True,
@@ -302,6 +303,14 @@ class Manager:
         if part.stat().st_size < 1000:
             part.unlink(missing_ok=True)
             raise ManagerError("The download was empty. Try again in a few minutes.")
+        if expect and expect[1]:
+            try:
+                verify.check(part, expect, "The download")
+            except verify.VerifyError as e:
+                raise ManagerError(str(e)) from e
+            self.log(f"{label}: checksum matches the one the publisher lists ({expect[0]}).")
+        else:
+            self.log(f"{label}: the publisher lists no checksum for this file, so it could not be verified.")
         part.replace(dest)
 
     def _build_spigot(self, url: str, version: str, d: Path, java_major: int) -> None:

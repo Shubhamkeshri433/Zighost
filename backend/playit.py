@@ -29,7 +29,7 @@ from pathlib import Path
 
 import requests
 
-from . import brand
+from . import brand, verify
 from .store import RUNTIME_DIR, SettingsError, get_settings, update_settings
 
 IS_WIN = sys.platform.startswith("win")
@@ -260,6 +260,15 @@ class Playit:
         if part.stat().st_size < 100_000:
             part.unlink(missing_ok=True)
             raise PlayitError("The playit helper download was incomplete. Try again.")
+        expected = verify.split_digest(asset.get("digest", ""))
+        if expected:
+            try:
+                verify.check(part, expected, "The playit helper download")
+            except verify.VerifyError as e:
+                raise PlayitError(str(e)) from e
+            self.note("playit helper: checksum matches the one GitHub lists for the file.")
+        else:
+            self.note("playit helper: GitHub lists no checksum for this file, so it could not be verified.")
         part.replace(dest)
         if not IS_WIN:
             dest.chmod(0o755)

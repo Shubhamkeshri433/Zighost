@@ -100,14 +100,17 @@ def resolve(stype: str, version: str) -> dict:
     if stype == "vanilla":
         entry = next(v for v in _mojang_releases() if v["id"] == version)
         meta = http_get_json(entry["url"])
-        return {"url": meta["downloads"]["server"]["url"], "kind": "jar", "build": ""}
+        return {"url": meta["downloads"]["server"]["url"], "kind": "jar", "build": "",
+                "hash": ("sha1", str(meta["downloads"]["server"].get("sha1", "")).lower())}
     if stype == "paper":
         builds = http_get_json(f"{PAPER_API}/versions/{version}/builds")
         if not builds:
             raise ProviderError(f"No Paper build for {version} yet.")
         stable = [b for b in builds if b.get("channel") == "STABLE"] or builds
         b = stable[0]
-        return {"url": b["downloads"]["server:default"]["url"], "kind": "jar", "build": str(b.get("id", ""))}
+        dl = b["downloads"]["server:default"]
+        return {"url": dl["url"], "kind": "jar", "build": str(b.get("id", "")),
+                "hash": ("sha256", str((dl.get("checksums") or {}).get("sha256", "")).lower())}
     if stype == "purpur":
         return {"url": f"{PURPUR_API}/{version}/latest/download", "kind": "jar", "build": "latest"}
     if stype == "fabric":
