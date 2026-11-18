@@ -116,7 +116,7 @@
     if (p === '/api/consent') { if (method === 'PUT') { if (json.accept) Object.assign(D.consent, { accepted: true, heads: !!json.heads, updates: true, accepted_at: now() }); else for (const k of ['heads', 'updates']) if (k in json) D.consent[k] = !!json[k]; } return { ...D.consent }; }
     if (p === '/api/support/report') return { text: 'Zighost 0.1.0 (preview)\nWindows/OS: Windows-11\nJava: Java 21\n\n--- last log lines ---\n(preview)', can_send: true };
     if (p === '/api/support/send') return { ok: true };
-    if (p === '/api/update') return { enabled: D.consent.updates, current: '0.1.0', latest: '0.2.0', available: true, url: 'https://github.com/', file: '', notes: 'Preview notes:\n- Faster start\n- Fixes', error: '', checked_at: now() };
+    if (p === '/api/update') return { enabled: D.consent.updates, current: '0.1.0', latest: '0.2.0', available: true, can_install: true, url: 'https://github.com/', file: '', notes: 'Preview notes:\n- Faster start\n- Fixes', error: '', checked_at: now() };
     if (p === '/api/components/prepare') { D.comp.running = true; D.comp.java = { state: 'installing', percent: 10, text: 'Downloading Java 21' }; D.comp.playit = { state: 'missing', percent: 0, text: '' }; D.comp.t = Date.now(); return { ...D.comp }; }
     if (p === '/api/components') {
       if (D.comp.running) { const k = (Date.now() - D.comp.t) / 1000; if (k > 4) { D.comp.running = false; D.comp.java = { state: 'ready', percent: 100, text: '' }; D.comp.playit = { state: 'ready', percent: 100, text: '' }; } else if (k > 2) { D.comp.java = { state: 'ready', percent: 100, text: '' }; D.comp.playit = { state: 'installing', percent: 0, text: '' }; } else D.comp.java.percent = Math.round(k * 45); }

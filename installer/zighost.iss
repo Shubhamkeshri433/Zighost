@@ -56,12 +56,19 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 [Files]
 Source: "..\dist\{#AppName}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
+; An update installs over the old copy. Delete the old program files first so nothing from the old version is left behind.
+; Servers, worlds, backups and settings live in %APPDATA%\{#DataKey}, never in {app}, so they are not touched.
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppName}.exe"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppName}.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppName}.exe"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
+; "Update now" inside the app runs this installer silently with /UPDATING=1 and expects the new version to open by itself.
+Filename: "{app}\{#AppName}.exe"; Flags: nowait; Check: IsUpdating
 
 [Code]
 const
@@ -71,6 +78,11 @@ const
 var
   DownloadPage: TDownloadWizardPage;
   WebView2File: String;
+
+function IsUpdating: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATING|0}') = '1';
+end;
 
 function WebView2Installed: Boolean;
 var

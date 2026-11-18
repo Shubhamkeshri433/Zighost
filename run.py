@@ -93,6 +93,7 @@ def main() -> int:
         if "--no-browser" not in args:
             threading.Thread(target=lambda: (time.sleep(1.2), webbrowser.open(url)), daemon=True).start()
         print(f"{brand.NAME} {brand.VERSION} is running at {url}  (press Ctrl+C to quit, servers are stopped safely)")
+        backend_app.updates.request_exit = lambda: setattr(server, "should_exit", True)
         server.run()
     finally:
         done.set()
@@ -121,6 +122,7 @@ def _run_window(server, url, backend_app, background, log) -> int:
     shell = Shell(url, on_quit=lambda: setattr(server, "should_exit", True), status=status, stop_servers=stop_servers,
                   background=background, wait_ready=lambda: _wait_ready(url))
     instance.show_callback = shell.show
+    backend_app.updates.request_exit = shell.quit
     backend_app.monitor.notifier = shell.notify
     ran = shell.run()
     if shell.failed:

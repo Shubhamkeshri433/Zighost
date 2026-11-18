@@ -43,6 +43,13 @@ Want to use Zighost without dealing with code? Simply download the Windows insta
 5. Launch Zighost from your Desktop shortcut or Windows Start Menu.
 
 That's it! You're ready to manage your Minecraft server.
+
+**Check your download (optional).** Each release has a `SHA256SUMS.txt` file. In PowerShell, run
+`Get-FileHash .\Zighost-Setup-<version>.exe -Algorithm SHA256` and compare the result with the line for that file.
+The installer is not code-signed yet, so Windows may show an "unknown publisher" warning.
+
+**Updates.** When a new version is out, Zighost shows an **Update now** button. It downloads the installer from this
+repository's release, checks it against `SHA256SUMS.txt`, closes, updates and opens again. Your servers and worlds are not touched.
 ### 💻 Option 2: Clone the Repository
 
 <badge color="info">For developers</badge>
@@ -128,6 +135,9 @@ Zighost/
 - The local API is restricted to localhost connections.
 - Server management operations are handled through the local application.
 - Your server files and data remain on your machine unless you choose to connect or share them through an external service.
+- No ads, no tracking and no usage counting. The only thing that can reach the developer is a support report you press Send on.
+- Saved secrets (Discord webhook, playit key) are encrypted with Windows DPAPI. If encryption fails they are not saved.
+- Downloads (Java, server files, playit helper, updates) are checked against the publisher's checksum where one is published.
 
 ---
 

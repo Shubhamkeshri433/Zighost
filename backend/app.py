@@ -31,7 +31,7 @@ VERSION = brand.VERSION
 FRONTEND = paths.FRONTEND
 log = logging.getLogger("mcpanel")
 USER_ERRORS = (openfolder.OpenError, ManagerError, providers.ProviderError, backups.BackupError, java_rt.JavaError, PlayitError,
-               players.PlayerError, fsops.FsError, plugins.PluginError, ScheduleError, mcping.PingError, SettingsError)
+               players.PlayerError, fsops.FsError, plugins.PluginError, ScheduleError, mcping.PingError, SettingsError, updates.UpdateError)
 
 
 class NoCacheStatic(StaticFiles):
@@ -797,6 +797,25 @@ def _fanout(kind, text):
     monitor.event(kind, text)
 
 
+@api
+async def update_state(request):
+    return {**updates.job(), "running_server": manager.busy()}
+
+
+@api
+async def update_start(request):
+    return await run_in_threadpool(updates.install_start)
+
+
+@api
+async def update_apply(request):
+    """Servers are stopped by the same safe shutdown the Quit button uses, so a running server needs an explicit yes."""
+    d = await body(request)
+    if manager.busy() and not d.get("stop_servers"):
+        raise ManagerError("A server is running. It will be stopped safely before the update.")
+    return await run_in_threadpool(updates.install_apply)
+
+
 _stop_housekeeping = threading.Event()
 
 
@@ -814,6 +833,7 @@ def _housekeeping(stop: threading.Event) -> None:
 @contextlib.asynccontextmanager
 async def lifespan(app):
     ensure_dirs()
+    updates.just_updated = await run_in_threadpool(updates.startup_cleanup)
     manager.on_before_start = _before_start
     manager.on_event = _fanout
     scheduler.start()
@@ -839,6 +859,9 @@ routes = [
     Route("/api/support/report", get_support_report, methods=["GET"]),
     Route("/api/support/send", post_send_report, methods=["POST"]),
     Route("/api/update", get_update, methods=["GET"]),
+    Route("/api/update/state", update_state, methods=["GET"]),
+    Route("/api/update/start", update_start, methods=["POST"]),
+    Route("/api/update/apply", update_apply, methods=["POST"]),
     Route("/api/components", get_components, methods=["GET"]),
     Route("/api/components/prepare", post_components, methods=["POST"]),
     Route("/api/windows", get_windows, methods=["GET"]),

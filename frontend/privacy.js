@@ -104,6 +104,29 @@ function gatePoint(icon, title, text) {
 const Updates = {
   info: null,
 
+  /* Update now: the app downloads the installer, checks it, closes and reopens as the new version. */
+  async install(btn, status) {
+    const say = t => { if (status) status.textContent = t; };
+    try {
+      let st = await api('/api/update/start', { method: 'POST', json: {} });
+      while (st.state === 'downloading') {
+        say(`Downloading and checking the update... ${st.progress}%`);
+        await new Promise(r => setTimeout(r, 700));
+        st = await api('/api/update/state');
+      }
+      if (st.state !== 'ready') throw new Error(st.error || 'The update could not be installed.');
+      const running = st.running_server;
+      if (!await confirmBox('Restart to finish the update?', running
+        ? 'A server is running. It is stopped safely first. Zighost then closes, updates and opens again. Your servers and worlds are kept.'
+        : 'Zighost closes, updates and opens again. Your servers and worlds are kept.', 'Update now')) { say(''); return; }
+      await api('/api/update/apply', { method: 'POST', json: { stop_servers: !!running } });
+      say('Updating. Zighost closes now and opens again by itself.');
+    } catch (e) {
+      say('');
+      toast(e.message || 'The update could not be installed. Use Download instead.', 'bad');
+    }
+  },
+
   async check(force) {
     try { this.info = await api('/api/update' + (force ? '?force=1' : '')); } catch { this.info = null; }
     return this.info;
@@ -115,16 +138,22 @@ const Updates = {
     const i = await this.check(false);
     let hidden = '';
     try { hidden = sessionStorage.getItem('updateHidden') || ''; } catch { /* private window */ }
+    if (i && i.just_updated && !this.toasted) { this.toasted = true; toast(`Updated to version ${i.just_updated}.`); }
     if (!el || !i || !i.available || hidden === i.latest) { if (el) el.hidden = true; return; }
+    const status = h('span', { class: 'hint' });
     el.replaceChildren(ico('download'), h('span', {}, h('strong', { text: `${BRAND.name} ${i.latest} is available. ` }), `You have ${i.current}. Your servers and worlds are kept.`),
       h('span', { class: 'grow' }),
-      h('a', { class: 'btn primary', href: i.file || i.url, target: '_blank', rel: 'noopener' }, 'Download'),
+      status,
+      i.can_install
+        ? h('button', { class: 'btn primary', type: 'button', onclick: e => busy(e.currentTarget, () => this.install(e.currentTarget, status)) }, 'Update now')
+        : h('a', { class: 'btn primary', href: i.file || i.url, target: '_blank', rel: 'noopener' }, 'Download'),
       h('button', { class: 'btn', type: 'button', onclick: () => { el.hidden = true; try { sessionStorage.setItem('updateHidden', i.latest); } catch { /* ignore */ } } }, 'Later'));
     el.hidden = false;
   },
 
   card() {
     const body = h('div');
+    const note = h('span', { class: 'hint' });
     const paint = i => {
       let line;
       if (!i) line = 'Could not read the update status.';
@@ -134,7 +163,10 @@ const Updates = {
       body.replaceChildren(h('p', { class: 'hint', style: 'margin-top:0', text: line }),
         h('div', { class: 'row-actions' },
           h('button', { class: 'btn', type: 'button', disabled: !!(i && !i.enabled), onclick: e => busy(e.currentTarget, async () => { paint(await this.check(true)); this.bar(); }) }, ico('refresh'), 'Check now'),
-          i && i.available ? h('a', { class: 'btn primary', href: i.file || i.url, target: '_blank', rel: 'noopener' }, 'Download ' + i.latest) : null),
+          i && i.available ? (i.can_install
+            ? h('button', { class: 'btn primary', type: 'button', onclick: e => busy(e.currentTarget, () => this.install(e.currentTarget, note)) }, 'Update now to ' + i.latest)
+            : h('a', { class: 'btn primary', href: i.file || i.url, target: '_blank', rel: 'noopener' }, 'Download ' + i.latest)) : null,
+          note),
         i && i.available && i.notes ? h('pre', { class: 'notes', text: i.notes }) : null);
     };
     paint(this.info);
