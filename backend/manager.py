@@ -52,6 +52,8 @@ def parse_jvm_args(text: str) -> list[str]:
     except ValueError:
         raise ManagerError("The Java arguments have an unclosed quote.") from None
     for p in parts:
+        if IS_WIN and (p.count('"') % 2 or p.count("'") % 2):       # Windows-style splitting does not notice a quote that is never closed
+            raise ManagerError("The Java arguments have an unclosed quote.")
         if not p.startswith("-"):
             raise ManagerError(f"Java arguments must start with a dash. Problem: {p[:30]}")
         if p.lower().split("=")[0] in _JVM_BLOCK or p.lower().startswith(("-xmx", "-xms")):
