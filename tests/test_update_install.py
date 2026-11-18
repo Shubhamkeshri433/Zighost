@@ -61,7 +61,8 @@ class Release(Base):
     def test_only_this_repos_installer_is_accepted(self):
         self.assertTrue(updates._release_ok(DATA))
         for bad in ({**DATA, "file": "https://evil.example/" + NAME}, {**DATA, "sums": "http://github.com/x"},
-                    {**DATA, "file_name": "..\\evil.exe"}, {**DATA, "file_name": "portable.zip"}, {**DATA, "file_name": "tool.exe"}):
+                    {**DATA, "file_name": "..\\evil.exe"}, {**DATA, "file_name": "portable.zip"}, {**DATA, "file_name": "tool.exe"},
+                    {**DATA, "latest": "1.0.1"}):          # tag says 1.0.1 but the installer inside is 9.9.9: mis-tagged release
             self.assertFalse(updates._release_ok(bad), bad)
 
     def test_portable_and_source_copies_do_not_self_update(self):

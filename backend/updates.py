@@ -87,7 +87,8 @@ def can_install() -> bool:
 def _release_ok(data: dict) -> bool:
     name = data.get("file_name", "")
     return bool(data.get("file", "").startswith(ALLOWED_PREFIX) and data.get("sums", "").startswith(ALLOWED_PREFIX)
-                and NAME_RE.match(name) and name.lower().endswith(".exe") and "setup" in name.lower())
+                and NAME_RE.match(name) and name.lower().endswith(".exe") and "setup" in name.lower()
+                and data.get("latest", "") != "" and data["latest"] in name)         # the installer must carry the release's own version
 
 
 _job_lock = threading.Lock()

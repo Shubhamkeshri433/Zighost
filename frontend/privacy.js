@@ -160,14 +160,14 @@ const Updates = {
       else if (i.error && !i.checked_at) line = i.error;
       else if (i.available) line = `Version ${i.latest} is available. You have ${i.current}.`;
       else line = `You have the latest version (${i.current}).`;
-      body.replaceChildren(h('p', { class: 'hint', style: 'margin-top:0', text: line }),
+      body.replaceChildren(...[h('p', { class: 'hint', style: 'margin-top:0', text: line }),
         h('div', { class: 'row-actions' },
           h('button', { class: 'btn', type: 'button', disabled: !!(i && !i.enabled), onclick: e => busy(e.currentTarget, async () => { paint(await this.check(true)); this.bar(); }) }, ico('refresh'), 'Check now'),
           i && i.available ? (i.can_install
             ? h('button', { class: 'btn primary', type: 'button', onclick: e => busy(e.currentTarget, () => this.install(e.currentTarget, note)) }, 'Update now to ' + i.latest)
             : h('a', { class: 'btn primary', href: i.file || i.url, target: '_blank', rel: 'noopener' }, 'Download ' + i.latest)) : null,
           note),
-        i && i.available && i.notes ? h('pre', { class: 'notes', text: i.notes }) : null);
+        i && i.available && i.notes ? h('pre', { class: 'notes', text: i.notes }) : null].filter(Boolean));   // a null child would print the word "null"
     };
     paint(this.info);
     return h('section', { class: 'card', style: 'margin-top:14px' }, h('div', { class: 'card-h' }, h('h2', { text: 'Updates' })), body);
