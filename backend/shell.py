@@ -30,6 +30,23 @@ class Api:
             return True
         return False
 
+    def _dialog(self, kind, **kw) -> str:
+        import webview
+        wins = getattr(webview, "windows", [])
+        if not wins:
+            return ""
+        r = wins[0].create_file_dialog(kind, **kw)
+        return str(r[0]) if r else ""
+
+    def pick_folder(self) -> str:
+        """Open the system's folder chooser. Returns the chosen path or an empty string."""
+        import webview
+        return self._dialog(webview.FOLDER_DIALOG)
+
+    def pick_zip(self) -> str:
+        import webview
+        return self._dialog(webview.OPEN_DIALOG, file_types=("Zip files (*.zip)",))
+
 
 SPLASH = """<!doctype html><meta charset="utf-8"><title>%(name)s</title>
 <style>html,body{margin:0;height:100%%;background:#10141d;color:#e8edf5;font:15px 'Segoe UI',system-ui,sans-serif;overflow:hidden}

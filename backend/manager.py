@@ -242,7 +242,7 @@ class Manager:
             port += 1
         raise ManagerError("Could not find a free port for the copy. Change the port in its settings.")
 
-    def duplicate_server(self, sid: str, name: str = "") -> dict:
+    def duplicate_server(self, sid: str, name: str = "", restore: tuple[str, str] | None = None) -> dict:
         """Copy a server (world, plugins, settings) under a new name and port. The original is not changed."""
         src = get_server(sid)
         if not src:
@@ -264,14 +264,18 @@ class Manager:
         name = (name or "").strip()
         if len(name) > 40:
             raise ManagerError("Give the copy a name of up to 40 characters.")
+        if restore:                                   # restore a backup into the copy instead of the original
+            zp = backups.backup_dir(sid) / backups.safe_name(restore[0])
+            if not zp.is_file():
+                raise ManagerError("That backup was not found.")
         meta.update(id=new_id, name=name or self._dup_name(src["name"], taken), port=self._dup_port(int(src["port"])),
-                    installed=False, created=int(time.time()))
+                    installed=False, created=int(time.time()), backup_dir="")
         save_server(meta)
         self._set_job(active=True, step="Copying", percent=0, error="", server_id=new_id)
-        threading.Thread(target=self._duplicate_thread, args=(sid, new_id), daemon=True).start()
+        threading.Thread(target=self._duplicate_thread, args=(sid, new_id, restore), daemon=True).start()
         return meta
 
-    def _duplicate_thread(self, src_id: str, new_id: str) -> None:
+    def _duplicate_thread(self, src_id: str, new_id: str, restore: tuple[str, str] | None = None) -> None:
         sdir, ddir = server_dir(src_id), server_dir(new_id)
         skip = {"session.lock"}
         try:
@@ -284,6 +288,9 @@ class Manager:
                 if i % 25 == 0:
                     self._progress("Copying files", int(95 * i / total))
             ddir.mkdir(parents=True, exist_ok=True)
+            if restore:
+                self._progress("Restoring the backup", 96)
+                backups.restore_into(ddir, backups.backup_dir(src_id) / restore[0], restore[1])
             fresh = get_server(new_id)
             write_props(ddir / "server.properties", {"server-port": str(fresh["port"])})
             fresh["installed"] = True
@@ -487,7 +494,7 @@ class Manager:
         if self.install_job["active"] and self.install_job["server_id"] == sid:
             raise ManagerError("This server is still installing.")
         shutil.rmtree(server_dir(sid), ignore_errors=True)
-        shutil.rmtree(backup_dir(sid), ignore_errors=True)
+        backups.purge(sid)
         remove_server(sid)
         if self.active_id == sid:
             self.active_id = None
@@ -630,6 +637,8 @@ class Manager:
                 self.state = "offline"
                 self.log("Server stopped.")
                 self._emit("server", f"{self._name(sid)} stopped.")
+                if (get_server(sid) or {}).get("backup_on_stop"):
+                    threading.Thread(target=self._backup_after_stop, args=(sid,), daemon=True).start()
                 return
             self.state = "crashed"
             self.log(f"Server stopped unexpectedly (exit code {code}).")
@@ -641,6 +650,13 @@ class Manager:
                 threading.Timer(5, self._auto_restart, args=(sid,)).start()
             elif len(self.crashes) > 3:
                 self.log("Crashed 3 times in 10 minutes. Auto-restart is paused. Check the log above.")
+
+    def _backup_after_stop(self, sid: str) -> None:
+        try:
+            info = backups.create_backup(sid, "on-stop")
+            self.log(f"Backup saved after the server stopped: {info['name']}.")
+        except (backups.BackupError, OSError) as e:
+            self.log(f"Backup after stopping failed: {e}")
 
     def _auto_restart(self, sid: str) -> None:
         if self.state != "crashed":
