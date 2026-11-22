@@ -302,6 +302,12 @@ async def duplicate_server(request):
 
 
 @api
+async def change_version(request):
+    d = await body(request)
+    return await run_in_threadpool(manager.change_version, sid_of(request), str(d.get("version", "")), bool(d.get("backup", True)))
+
+
+@api
 async def delete_server(request):
     await run_in_threadpool(manager.delete_server, sid_of(request))
     return {"ok": True}
@@ -882,6 +888,7 @@ routes = [
     Route(S, patch_server, methods=["PATCH"]),
     Route(S, delete_server, methods=["DELETE"]),
     Route(S + "/duplicate", duplicate_server, methods=["POST"]),
+    Route(S + "/version", change_version, methods=["POST"]),
     Route(S + "/start", start_server, methods=["POST"]),
     Route("/api/stop", stop_server, methods=["POST"]),
     Route("/api/restart", restart_server, methods=["POST"]),

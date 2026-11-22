@@ -19,7 +19,7 @@ import requests
 
 import shlex
 
-from . import java_rt, plugins, providers, servericon, verify
+from . import backups, java_rt, plugins, providers, servericon, verify
 from .props import DEFAULTS, clean_props, read_props, write_props
 from .store import (get_server, get_settings, list_servers, remove_server, save_server,
                     server_dir, update_server, update_settings, new_server_id, backup_dir)
@@ -296,6 +296,70 @@ class Manager:
             shutil.rmtree(ddir, ignore_errors=True)
             remove_server(new_id)
 
+    # ---- change the Minecraft version of a server ---------------------------
+    # Files that belong to one Minecraft version. They are deleted after a version change and the server makes them
+    # again on the next start. The world, plugins, mods and every setting are never in this list.
+    VERSION_FILES = ("libraries", "versions", "cache", ".fabric", "_build", "plugins/.paper-remapped")
+
+    def change_version(self, sid: str, version: str, backup: bool = True) -> dict:
+        meta = get_server(sid)
+        if not meta:
+            raise ManagerError("That server was not found.")
+        if not meta.get("installed"):
+            raise ManagerError("This server is not finished installing.")
+        if self.active_id == sid and self.busy():
+            raise ManagerError("Stop the server before changing its version.")
+        if self.install_job["active"]:
+            raise ManagerError("Another server is being installed or changed. Wait for it to finish.")
+        version = str(version or "").strip()
+        if version == meta["version"]:
+            raise ManagerError(f"This server already uses {version}.")
+        if version not in providers.list_versions(meta["type"]):
+            raise ManagerError(f"{providers.TYPES.get(meta['type'], {}).get('label', meta['type'])} has no version {version}.")
+        downgrade = providers._vkey(version) < providers._vkey(meta["version"])
+        self._set_job(active=True, step="Preparing", percent=0, error="", server_id=sid)
+        threading.Thread(target=self._change_version_thread, args=(sid, version, backup or downgrade, downgrade), daemon=True).start()
+        return {"from": meta["version"], "to": version, "downgrade": downgrade, "backup": backup or downgrade}
+
+    def _change_version_thread(self, sid: str, version: str, backup: bool, downgrade: bool) -> None:
+        d = server_dir(sid)
+        new_jar = d / "server.jar.new"
+        try:
+            meta = get_server(sid)
+            self._progress("Looking up version", 2)
+            info = providers.resolve(meta["type"], version)
+            need_java = providers.java_required(version)
+            self.ensure_java(need_java, jdk=(info["kind"] == "buildtools"))
+            if backup:
+                self._progress("Saving a backup first", 5)
+                b = backups.create_backup(sid, "before-update")
+                self.log(f"Backup saved before changing the version: {b['name']}.")
+            if info["kind"] == "jar":
+                self._download(info["url"], new_jar, f"Downloading {version}", expect=info.get("hash"))
+            else:
+                self._build_spigot(info["url"], version, d, need_java, dest=new_jar)
+            new_jar.replace(d / "server.jar")
+            self._progress("Removing old version files", 95)
+            for rel in self.VERSION_FILES:
+                target = d.joinpath(*rel.split("/"))
+                if target.is_dir():
+                    shutil.rmtree(target, ignore_errors=True)
+            fresh = get_server(sid) or meta
+            old = fresh["version"]
+            fresh["version"] = version
+            fresh["version_changed"] = {"from": old, "to": version, "at": int(time.time())}
+            save_server(fresh)
+            self._set_job(active=False, step="Done", percent=100)
+            self.log(f"{fresh['name']} now uses {providers.TYPES[fresh['type']]['label']} {version}. Your world and settings were kept."
+                     + (" This is an older version than before: if the server does not start, restore the backup." if downgrade else ""))
+        except Exception as e:  # noqa: BLE001  (the old version stays in place, so the server still works)
+            new_jar.unlink(missing_ok=True)
+            new_jar.with_suffix(".jar.part").unlink(missing_ok=True)
+            msg = str(e) if isinstance(e, (ManagerError, providers.ProviderError, java_rt.JavaError, backups.BackupError)) \
+                else f"Version change failed: {e.__class__.__name__}: {e}"
+            self._set_job(active=False, error=msg + " Nothing was changed.", step="Failed")
+            self.log(msg)
+
     def _progress(self, step: str, pct: int) -> None:
         self._set_job(step=step, percent=max(0, min(100, int(pct))))
 
@@ -390,7 +454,7 @@ class Manager:
             self.log(f"{label}: the publisher lists no checksum for this file, so it could not be verified.")
         part.replace(dest)
 
-    def _build_spigot(self, url: str, version: str, d: Path, java_major: int) -> None:
+    def _build_spigot(self, url: str, version: str, d: Path, java_major: int, dest: Path | None = None) -> None:
         work = d / "_build"
         work.mkdir(exist_ok=True)
         self._download(url, work / "BuildTools.jar", "Downloading BuildTools")
@@ -413,7 +477,7 @@ class Manager:
         jars = sorted(work.glob("spigot-*.jar"))
         if not jars:
             raise ManagerError("Spigot build finished but no jar was produced.")
-        shutil.copy2(jars[-1], d / "server.jar")
+        shutil.copy2(jars[-1], dest or d / "server.jar")
         shutil.rmtree(work, ignore_errors=True)
 
     # ---- delete -----------------------------------------------------------

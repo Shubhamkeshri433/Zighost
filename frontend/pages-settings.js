@@ -28,6 +28,7 @@ Pages.settings = {
     this.cfg.lock.forEach(i => { i.disabled = run; });
     this.lockNote.hidden = !run;
     this.restartNote.hidden = !(run && this.saved);
+    if (this.vc) this.vc.sync();
   },
 
   cfgValues() {
@@ -57,7 +58,7 @@ Pages.settings = {
     c.notes = h('textarea', { id: 'sv-notes', rows: 3, maxlength: 2000, placeholder: 'Anything you want to remember about this server.', oninput: onInput }, this.orig.notes);
     c.lock = [c.name, c.ram, c.port, c.jvm];
 
-    this.lockNote = h('div', { class: 'note warn', hidden: true, text: 'The server is running. Stop it to change its name, memory, port or Java arguments. Game settings below can be edited now and apply after a restart.' });
+    this.lockNote = h('div', { class: 'note warn', hidden: true, text: 'The server is running. Stop it to change its name, version, memory, port or Java arguments. Game settings below can be edited now and apply after a restart.' });
     this.restartNote = h('div', { class: 'note warn', hidden: true, style: 'display:flex;gap:12px;align-items:center' },
       h('span', { class: 'grow', text: 'Saved. Restart the server so the new settings apply.' }),
       h('button', { class: 'btn small', onclick: e => busy(e.currentTarget, async () => { await api('/api/restart', { method: 'POST' }); this.saved = false; await refresh(); }) }, ico('restart'), 'Restart now'));
@@ -81,8 +82,56 @@ Pages.settings = {
       h('button', { class: 'btn', type: 'button', onclick: () => this.discard() }, 'Discard'),
       h('button', { class: 'btn primary', type: 'button', onclick: e => this.save(e.currentTarget) }, ico('save'), 'Save changes'));
 
-    this.body.replaceChildren(this.lockNote, this.restartNote, this.iconCard(srv), h('div', { style: 'height:14px' }), opts, h('div', { style: 'height:14px' }), PropForm.toolbar(this.form), this.form.el, this.bar);
+    this.body.replaceChildren(this.lockNote, this.restartNote, this.iconCard(srv), h('div', { style: 'height:14px' }), this.versionCard(srv), h('div', { style: 'height:14px' }), opts, h('div', { style: 'height:14px' }), PropForm.toolbar(this.form), this.form.el, this.bar);
     this.update();
+  },
+
+  versionCard(srv) {
+    const vk = v => String(v).split(/[.-]/).map(x => (/^\d+$/.test(x) ? +x : 0));
+    const older = (a, b) => { const x = vk(a), y = vk(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
+    const sel = h('select', { id: 'sv-version', 'aria-label': 'Minecraft version', disabled: true }, h('option', { text: 'Loading versions...' }));
+    const backup = h('input', { type: 'checkbox', id: 'sv-vbackup', checked: true });
+    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true }, ico('refresh'), 'Change version');
+    const prog = h('div', { hidden: true }, h('div', { class: 'meter-track' }, h('div', { class: 'meter-fill', style: 'width:0%' })), h('p', { class: 'hint', text: '' }));
+    const state = this.vc = { sel, btn, backup, busy: false };
+    const sync = () => {
+      const same = sel.value === srv.version, down = !same && sel.value && older(sel.value, srv.version);
+      backup.disabled = down || state.busy || this.running(); if (down) backup.checked = true;
+      btn.disabled = same || !sel.value || state.busy || this.running() || sel.disabled;
+      sel.disabled = state.busy || this.running() || !state.loaded;
+      btn.lastChild.textContent = down ? 'Go to older version' : 'Change version';
+    };
+    state.sync = sync;
+    sel.addEventListener('change', sync);
+    api('/api/versions?type=' + srv.type).then(r => {
+      state.loaded = true;
+      sel.replaceChildren(...r.versions.map(v => h('option', { value: v, text: v === srv.version ? `${v} (current)` : v })));
+      sel.value = srv.version; sync();
+    }).catch(e => { sel.replaceChildren(h('option', { text: 'Could not load versions' })); fail(e); });
+    btn.addEventListener('click', async () => {
+      const to = sel.value, down = older(to, srv.version);
+      const text = (down ? `${to} is older than ${srv.version}. A world that was used on a newer version can break on an older one, so a backup is saved first and you can restore it. ` : '')
+        + 'Your world, settings and plugins stay. Only the old server files are replaced and removed. Check the Plugins page afterwards, because plugins are made for one Minecraft version.';
+      if (!await confirmBox(`Change ${srv.name} to ${cap(srv.type)} ${to}?`, text, down ? 'Go to older version' : 'Change version', down)) return;
+      state.busy = true; sync(); prog.hidden = false;
+      const bar = prog.querySelector('.meter-fill'), msg = prog.querySelector('p');
+      try {
+        await api(`/api/servers/${srv.id}/version`, { method: 'POST', json: { version: to, backup: backup.checked } });
+        do {
+          await new Promise(r => setTimeout(r, 900)); await refresh();
+          const ins = S.st.install; bar.style.width = (ins.percent || 0) + '%'; msg.textContent = ins.step || '';
+          if (!ins.active) { if (ins.error) { S.lastInstallErr = ins.error; throw new Error(ins.error); } break; }
+        } while (true);
+        toast(`${srv.name} now uses ${cap(srv.type)} ${to}. Open Plugins to check your plugins.`, 'ok');
+        this.load();
+      } catch (e) { fail(e); state.busy = false; prog.hidden = true; sync(); }
+    });
+    return h('section', { class: 'card' },
+      h('div', { class: 'card-h' }, h('div', {}, h('h2', { text: 'Server version' }),
+        h('p', { class: 'hint', text: `Now ${cap(srv.type)} ${srv.version}. Pick another version to update or go back. Your world and settings are kept.` }))),
+      h('div', { class: 'field' }, h('label', { for: 'sv-version', text: 'Minecraft version' }), sel),
+      h('label', { class: 'check' }, backup, h('span', { text: ' Save a backup first (always done when going to an older version)' })),
+      h('div', { class: 'row-actions', style: 'margin-top:12px' }, btn), prog);
   },
 
   iconCard(srv) {

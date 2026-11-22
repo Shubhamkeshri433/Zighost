@@ -139,6 +139,11 @@
     }
     if ((m = p.match(/^\/api\/servers\/(\w+)$/)) && method === 'PATCH') { Object.assign(D.servers.find(s => s.id === m[1]), json); return { server: D.servers.find(s => s.id === m[1]) }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)\/icon$/)) && method !== 'GET') { const sv = D.servers.find(x => x.id === m[1]); if (sv) sv.icon = method === 'PUT' ? Date.now() : 0; return { icon: sv ? sv.icon : 0 }; }
+    if ((m = p.match(/^\/api\/servers\/(\w+)\/version$/)) && method === 'POST') {
+      const sv = D.servers.find(x => x.id === m[1]); D.install = { active: true, step: 'Downloading ' + json.version, percent: 20, error: '', server_id: sv.id };
+      const t = setInterval(() => { D.install.percent += 30; if (D.install.percent >= 100) { clearInterval(t); sv.version = json.version; D.install = { active: false, step: 'Done', percent: 100, error: '', server_id: sv.id }; } }, 600);
+      return { from: sv.version, to: json.version, downgrade: false, backup: !!json.backup };
+    }
     if ((m = p.match(/^\/api\/servers\/(\w+)\/duplicate$/)) && method === 'POST') { const src = D.servers.find(x => x.id === m[1]); const c = { ...src, id: Math.random().toString(16).slice(2, 10), name: (json && json.name) || src.name + ' duplicate', port: src.port + 2, created: now() }; D.servers.push(c); return { server: c }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)$/)) && method === 'DELETE') { D.servers = D.servers.filter(s => s.id !== m[1]); return { ok: true }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)\/start$/))) { await demoStart(m[1]); return { ok: true }; }
