@@ -52,7 +52,8 @@ class DuplicateTest(unittest.TestCase):
         self.assertEqual(meta["name"], "Friends duplicate")
         self.assertNotEqual(meta["id"], "aaaa1111")
         self.assertNotEqual(meta["port"], 25565)
-        self.assertTrue(wait_for(lambda: (get_server(meta["id"]) or {}).get("installed")))
+        self.assertTrue(wait_for(lambda: not self.m.install_job["active"]))
+        self.assertTrue(get_server(meta["id"])["installed"])
         nd = server_dir(meta["id"])
         self.assertEqual((nd / "world" / "level.dat").read_bytes(), b"world-data")
         self.assertTrue((nd / "plugins" / "Essentials.jar").exists())
@@ -69,6 +70,7 @@ class DuplicateTest(unittest.TestCase):
         b = self.m.duplicate_server("aaaa1111")
         self.assertTrue(wait_for(lambda: not self.m.install_job["active"]))
         c = self.m.duplicate_server("aaaa1111")
+        self.assertTrue(wait_for(lambda: not self.m.install_job["active"]))   # let the copy finish before the next test
         self.assertEqual(b["name"], "Friends duplicate")
         self.assertEqual(c["name"], "Friends duplicate 2")
         self.assertEqual(len({a["port"], b["port"], c["port"]}), 3)
