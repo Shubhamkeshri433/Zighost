@@ -1,7 +1,7 @@
 /* ---------- themes ---------- */
 :root, :root[data-theme="deepslate"] {
   --bg: #13161d; --side: #0e1016; --panel: #1a1e29; --panel-2: #222836; --panel-3: #2b3244;
-  --line: #2c3345; --line-2: #3b4560; --text: #e8ecf4; --muted: #98a3b8; --faint: #6c778f;
+  --line: #2c3345; --line-2: #3b4560; --text: #e8ecf4; --muted: #98a3b8; --faint: #8590a8;
   --primary: #5cbf4a; --primary-hi: #78d764; --primary-ink: #0b1707; --primary-soft: #1b3016;
   --accent: #52c7e0; --accent-soft: #14303a;
   --warn: #f0b84a; --warn-soft: #3a2f12; --bad: #f2645a; --bad-soft: #3a1b1b; --ok: #5cbf4a;
@@ -9,7 +9,7 @@
 }
 :root[data-theme="nether"] {
   --bg: #1a1214; --side: #130c0e; --panel: #241719; --panel-2: #301f22; --panel-3: #3c2a2d;
-  --line: #3d2b2e; --line-2: #55393d; --text: #f4e9e6; --muted: #bba3a0; --faint: #8a7270;
+  --line: #3d2b2e; --line-2: #55393d; --text: #f4e9e6; --muted: #bba3a0; --faint: #a08886;
   --primary: #ff7a45; --primary-hi: #ff9565; --primary-ink: #220c02; --primary-soft: #3d2014;
   --accent: #c58bff; --accent-soft: #2e1f3d;
   --warn: #f5c04a; --warn-soft: #3a2f12; --bad: #ff5d6c; --bad-soft: #401a1f; --ok: #6ccf7a;
@@ -17,7 +17,7 @@
 }
 :root[data-theme="daylight"] {
   --bg: #eef1f6; --side: #ffffff; --panel: #ffffff; --panel-2: #f3f5f9; --panel-3: #e6eaf1;
-  --line: #dde2ec; --line-2: #c3cbdb; --text: #1b2232; --muted: #556078; --faint: #7d889f;
+  --line: #dde2ec; --line-2: #c3cbdb; --text: #1b2232; --muted: #556078; --faint: #667189;
   --primary: #2f9e44; --primary-hi: #38b04f; --primary-ink: #ffffff; --primary-soft: #e0f4e4;
   --accent: #1c7ed6; --accent-soft: #dcecfb;
   --warn: #b7791f; --warn-soft: #fdf2d8; --bad: #d63b3b; --bad-soft: #fde4e4; --ok: #2f9e44;
@@ -520,3 +520,11 @@ body.modal-open { overflow: hidden; }
 .md img.md-img { max-width: 100%; border-radius: 6px; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 @media (max-width: 640px) { .proj-head { flex-direction: column; } }
+
+.scard-sub.faintline { color: var(--faint); font-size: 12px; }
+.scard-actions .btn { min-height: 38px; }
+@media (max-width: 520px) {
+  .list li { flex-wrap: wrap; }
+  .list li .grow { flex: 1 1 calc(100% - 70px); min-width: 0; }
+  .list li > .btn { flex: 1 1 auto; justify-content: center; }
+}

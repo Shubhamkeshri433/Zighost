@@ -49,7 +49,7 @@ Pages.servers = {
       try { await navigator.clipboard.writeText(st.playit.address); toast('Address copied.', 'ok'); } catch { toast(st.playit.address); } } },
       h('span', { text: st.playit.address }), ico('copy')) : null;
     const head = h('button', { class: 'scard-head', type: 'button', disabled: !s.installed, onclick: () => openServer(s.id) }, serverIcon(s),
-      h('div', { class: 'min0' }, h('div', { class: 'scard-name', text: s.name }), h('div', { class: 'scard-sub', text: `${cap(s.type)} ${s.version}` })));
+      h('div', { class: 'min0' }, h('div', { class: 'scard-name', text: s.name }), h('div', { class: 'scard-sub', text: `${cap(s.type)} ${s.version}` }), h('div', { class: 'scard-sub faintline', text: `${(s.ram_mb / 1024).toFixed(s.ram_mb % 1024 ? 1 : 0)} GB memory, port ${s.port}` })));
     const power = live
       ? h('button', { class: 'btn danger', type: 'button', disabled: st.state !== 'online', onclick: e => busy(e.currentTarget, async () => { await api('/api/stop', { method: 'POST' }); toast('Stopping. The world is saved first.'); await refresh(); }) }, ico('stop'), 'Stop')
       : h('button', { class: 'btn primary', type: 'button', disabled: !s.installed || !!act || st.install.active, title: act && !live ? 'Only one server can run at a time. Stop the running one first.' : '',
@@ -58,7 +58,7 @@ Pages.servers = {
       if (!await confirmBox(`Delete ${s.name}?`, 'Its world, plugins and all its backups are deleted. This cannot be undone.', 'Delete server', true)) return;
       busy(e.currentTarget, async () => { await api('/api/servers/' + s.id, { method: 'DELETE' }); toast('Server deleted.', 'ok'); await refresh(); this.listSig = ''; this.drawList(); });
     } }, ico('trash'));
-    const dup = h('button', { class: 'btn small', type: 'button', 'aria-label': 'Duplicate ' + s.name, title: live ? 'Stop the server first' : 'Make a copy of this server',
+    const dup = h('button', { class: 'btn', type: 'button', 'aria-label': 'Duplicate ' + s.name, title: live ? 'Stop the server first' : 'Make a copy of this server',
       disabled: live || installing || unfinished || st.install.active, onclick: async () => {
         const n = await promptBox('Duplicate ' + s.name, 'Name of the copy', `${s.name} duplicate`.slice(0, 40), 'Duplicate');
         if (!n) return;
