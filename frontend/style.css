@@ -528,3 +528,4 @@ body.modal-open { overflow: hidden; }
   .list li .grow { flex: 1 1 calc(100% - 70px); min-width: 0; }
   .list li > .btn { flex: 1 1 auto; justify-content: center; }
 }
+.pathbox { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; overflow-wrap: anywhere; }

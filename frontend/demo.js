@@ -33,8 +33,8 @@
       files: { '': [{ name: 'plugins', dir: true, size: 0, modified: now() - 900, editable: false }, { name: 'world', dir: true, size: 0, modified: now() - 60, editable: false }, { name: 'server.properties', dir: false, size: 1200, modified: now() - 7200, editable: true }, { name: 'paper.jar', dir: false, size: 48_000_000, modified: now() - 86400, editable: false }], plugins: [{ name: 'EssentialsX.jar', dir: false, size: 2_100_000, modified: now() - 900, editable: false }] },
     },
     backups: [
-      { name: '20261109-210000_manual.zip', size: 148_000_000, created: now() - 3600 * 3 },
-      { name: '20261108-183000_before-restore.zip', size: 141_000_000, created: now() - 86400 },
+      { name: '20261109-210000_manual.zip', size: 148_000_000, created: now() - 3600 * 3, scope: 'standard', version: '1.21.4', type: 'paper', damaged: false },
+      { name: '20261108-183000_before-restore.zip', size: 141_000_000, created: now() - 86400, scope: 'world', version: '1.20.6', type: 'paper', damaged: false },
     ],
   };
   window.MCP_DEMO_HISTORY = {
@@ -160,10 +160,18 @@
       if (method === 'PUT') { Object.assign(D.props, json.properties); return { ok: true }; }
       return { properties: { ...D.props }, running: D.state === 'online' };
     }
+    const BK = (D.bk = D.bk || { folder: '', scope: 'standard', on_stop: false, rules: { count: 10, days: 0, gb: 0 } });
+    const bkInfo = () => ({ backups: D.backups, folder: BK.folder || 'C:\\Users\\you\\AppData\\Roaming\\zighost\\backups\\demo', own_folder: BK.folder, shared_folder: '', scope: BK.scope, on_stop: BK.on_stop, rules: BK.rules, version: '1.21.4', type: 'paper', running: D.state !== 'offline' });
     if ((m = p.match(/^\/api\/servers\/(\w+)\/backups$/))) {
-      if (method === 'POST') { const b = { name: `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now() % 1e6}_manual.zip`, size: 150_000_000, created: now() }; D.backups.unshift(b); return { backup: b }; }
-      return { backups: D.backups };
+      if (method === 'POST') { const b = { name: `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now() % 1e6}_manual.zip`, size: 150_000_000, created: now(), scope: BK.scope, version: '1.21.4', type: 'paper', damaged: false }; D.backups.unshift(b); return { backup: { ...b, removed: [] } }; }
+      return bkInfo();
     }
+    if (p.endsWith('/backups/progress')) return { active: false, pct: 60, step: 'Packing worlds' };
+    if (p.endsWith('/backup-options')) { const o = json || {}; if ('folder' in o) BK.folder = o.folder; if (o.scope) BK.scope = o.scope; if ('on_stop' in o) BK.on_stop = o.on_stop; if (o.rules) BK.rules = o.rules; return bkInfo(); }
+    if (p === '/api/backup-folder/check') return { ok: true };
+    if (p.endsWith('/backups/import')) { D.backups.unshift({ name: '20250101-000000_imported.zip', size: 90_000_000, created: now(), scope: 'standard', damaged: false }); return { ok: true }; }
+    if (p.match(/\/backups\/[^/]+\/verify$/)) return { ok: true, files: 412 };
+    if (p.match(/\/backups\/[^/]+\/restore-new$/)) return { ok: true };
     if ((m = p.match(/^\/api\/servers\/(\w+)\/backups\/([^/]+)\/restore$/))) {
       if (D.state !== 'offline') err('Stop the server before restoring a backup.');
       return { ok: true };

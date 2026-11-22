@@ -131,6 +131,15 @@ function dialog({ title, text = '', ok = 'OK', danger = false, field = null }) {
 const confirmBox = (title, text, ok = 'OK', danger = false) => dialog({ title, text, ok, danger });
 const promptBox = (title, label, value = '', ok = 'OK', text = '') => dialog({ title, text, ok, field: { label, value } });
 
+/* Ask for a folder (or a zip file): the system chooser inside the app window, a typed path in a browser. */
+async function pickPath(kind, current = '', title = 'Folder', label = 'Full path, for example D:\\Backups') {
+  const bridge = window.pywebview && window.pywebview.api;
+  const fn = bridge && (kind === 'zip' ? bridge.pick_zip : bridge.pick_folder);
+  if (fn) { const r = await (kind === 'zip' ? bridge.pick_zip() : bridge.pick_folder()); return r || null; }
+  const v = await promptBox(title, label, current, 'Use this');
+  return v && v.trim() ? v.trim() : null;
+}
+
 async function busy(btn, fn) {
   if (btn) btn.disabled = true;
   try { return await fn(); } catch (e) { fail(e); } finally { if (btn) btn.disabled = false; }
