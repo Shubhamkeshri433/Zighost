@@ -291,8 +291,45 @@ def _requires(ver: dict) -> list[str]:
     return [n for n in names if n]
 
 
-def install(sid: str, project_id: str, version_id: str = "", allow_other_version: bool = False) -> dict:
-    """Install the newest release for this server, or one chosen version (version_id)."""
+CDN = "https://cdn.modrinth.com/"
+
+
+def _cdn(url) -> str:
+    url = str(url or "")
+    return url if url.startswith(CDN) else ""
+
+
+def project_page(sid: str, project_id: str) -> dict:
+    """Everything the detail page shows for one project: text, pictures and every published version."""
+    _, folder, loaders, meta = _folder(sid)
+    if not ID_RE.match(project_id or ""):
+        raise PluginError("That project id is not valid.")
+    pr = _get(f"/project/{project_id}")
+    versions = _get(f"/project/{project_id}/version")
+    mc = meta["version"]
+    vers = []
+    for v in versions[:150]:
+        b = _version_brief(v)
+        b["compatible"] = mc in b["game_versions"] and bool(set(b["loaders"]) & set(loaders))
+        try:
+            b["filename"] = _primary_file(v)["filename"]
+        except PluginError:
+            continue
+        vers.append(b)
+    links = {k: pr.get(f"{k}_url") for k in ("source", "issues", "wiki", "discord")}
+    return {"id": pr.get("id", project_id), "slug": pr.get("slug", ""), "title": pr.get("title", ""),
+            "summary": pr.get("description", ""), "body": str(pr.get("body") or "")[:60000],
+            "icon": _cdn(pr.get("icon_url")), "downloads": pr.get("downloads", 0), "followers": pr.get("followers", 0),
+            "categories": pr.get("categories", [])[:8], "license": (pr.get("license") or {}).get("name", ""),
+            "gallery": [{"url": _cdn(g.get("url")), "title": g.get("title", "")} for g in pr.get("gallery", []) if _cdn(g.get("url"))][:12],
+            "links": {k: u for k, u in links.items() if isinstance(u, str) and u.startswith(("https://", "http://"))},
+            "minecraft": mc, "versions": vers}
+
+
+def install(sid: str, project_id: str, version_id: str = "", allow_other_version: bool = False,
+            replace_file: str = "") -> dict:
+    """Install the newest release for this server, or one chosen version (version_id). With replace_file the older
+    file of the same plugin is removed once the new one is safely downloaded (its on/off state is kept)."""
     d, folder, loaders, meta = _folder(sid)
     if not ID_RE.match(project_id or ""):
         raise PluginError("That project id is not valid.")
@@ -315,8 +352,16 @@ def install(sid: str, project_id: str, version_id: str = "", allow_other_version
         versions.sort(key=lambda v: (v.get("version_type") != "release", ))   # stable: releases first, then API order
         ver = versions[0]
     name = _download_version(d, ver)
-    (d / (name + ".part")).replace(d / name)
-    return {"file": name, "version": ver.get("version_number", ""), "requires": _requires(ver)}
+    part = d / (name + ".part")
+    old = _target(sid, replace_file) if replace_file else None
+    final = d / (name + (".disabled" if old is not None and old.name.endswith(".disabled") else ""))
+    if old is not None and final != old and final.exists():
+        part.unlink(missing_ok=True)
+        raise PluginError(f"A file named {final.name} already exists. Remove it first.")
+    if old is not None and final != old:
+        old.unlink()
+    part.replace(final)
+    return {"file": final.name, "version": ver.get("version_number", ""), "requires": _requires(ver)}
 
 
 def update(sid: str, filename: str) -> dict:

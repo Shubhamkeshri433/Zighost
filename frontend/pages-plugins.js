@@ -103,6 +103,7 @@ Pages.plugins = {
       return h('li', {}, h('label', { class: 'switch' }, sw, h('i')),
         h('div', { class: 'grow' }, h('div', { class: 't' }, p.title + (p.version ? ' ' + p.version : ''), badge ? ' ' : null, badge),
           h('div', { class: 's nowrap', text: p.description || p.file }), p.description ? h('div', { class: 's mono', text: `${p.file}, ${fmtSize(p.size)}` }) : null),
+        st && st.project_id ? h('button', { class: 'btn small', type: 'button', title: 'See all versions', onclick: () => this.openProject(st.project_id, p) }, 'Versions') : null,
         upd,
         h('button', { class: 'btn small ghost-danger', type: 'button', 'aria-label': 'Remove ' + p.title, onclick: async () => {
           if (!await confirmBox(`Remove ${p.title}?`, `The file ${p.file} is deleted. Its settings folder stays.`, 'Remove', true)) return;
@@ -153,11 +154,82 @@ Pages.plugins = {
       const busyNow = this.installing.has(p.id);
       const btn = h('button', { class: 'btn small primary', type: 'button', disabled: busyNow, onclick: e => this.install(p, e.currentTarget) }, busyNow ? 'Installing...' : have.has(p.title.toLowerCase()) ? 'Install again' : 'Install');
       return h('div', { class: 'plug' }, icon, h('div', { class: 'body' },
-        h('div', { class: 'row-actions', style: 'justify-content:space-between;flex-wrap:nowrap' }, h('strong', { class: 'nowrap', text: p.title }), btn),
+        h('div', { class: 'row-actions', style: 'justify-content:space-between;flex-wrap:nowrap' }, h('button', { class: 'linklike nowrap', type: 'button', title: 'See all versions', onclick: () => this.openProject(p.id, p), text: p.title }), btn),
         h('div', { class: 's hint', text: `by ${p.author}, ${Intl.NumberFormat().format(p.downloads)} downloads` }), h('p', { text: p.description })));
     });
     this.results.replaceChildren(h('div', { class: 'grid two' }, cards),
       this.hits.length < this.total ? h('div', { style: 'text-align:center' }, h('button', { class: 'btn', type: 'button', onclick: () => this.search(this.hits.length) }, 'Show more')) : null);
+  },
+
+  /* ---------- project page: description, pictures and every version, like Modrinth ---------- */
+  installedOf(projectId) {
+    const c = this.chk && this.chk.items ? Object.values(this.chk.items).find(i => i.project_id === projectId) : null;
+    return c ? { file: c.file, number: c.current } : null;
+  },
+
+  async openProject(id, hint = {}) {
+    this.body.replaceChildren(h('div', { class: 'tools' }, h('button', { class: 'btn', type: 'button', onclick: () => this.draw() }, ico('back'), 'Back'), h('strong', { text: hint.title || '' })),
+      h('p', { class: 'hint', text: 'Loading...' }));
+    let pr;
+    try { pr = await api(srvUrl('/plugins/project?id=' + encodeURIComponent(id))); } catch (e) { fail(e); return this.draw(); }
+    this.drawProject(pr);
+  },
+
+  drawProject(pr) {
+    const w = this.word(), mc = pr.minecraft;
+    const mine = this.installedOf(pr.id);
+    const icon = pr.icon ? h('img', { src: pr.icon, alt: '', referrerpolicy: 'no-referrer', class: 'proj-icon', onerror: e => e.target.replaceWith(h('div', { class: 'ph proj-icon' })) }) : h('div', { class: 'ph proj-icon' });
+    const nice = n => Intl.NumberFormat().format(n);
+    const links = Object.entries(pr.links || {}).map(([k, u]) => h('a', { class: 'btn small', href: u, target: '_blank', rel: 'noopener noreferrer' }, cap(k)));
+    const head = h('div', { class: 'proj-head' }, icon, h('div', { class: 'grow min0' }, h('h2', { text: pr.title }),
+      h('p', { text: pr.summary }), h('p', { class: 'hint', text: `${nice(pr.downloads)} downloads${pr.license ? ', ' + pr.license : ''}${(pr.categories || []).length ? ', ' + pr.categories.join(', ') : ''}` }),
+      links.length ? h('div', { class: 'row-actions' }, links) : null));
+    const compat = pr.versions.filter(v => v.compatible);
+    let showAll = !compat.length;
+    const list = h('div', { class: 'card' });
+    const drawVersions = () => {
+      const vs = showAll ? pr.versions : compat;
+      const rows = vs.map(v => {
+        const isMine = mine && mine.number === v.number;
+        const gv = v.game_versions.filter(x => /^\d+\.\d+(\.\d+)?$/.test(x));
+        const range = gv.length > 1 ? `${gv[0]} to ${gv[gv.length - 1]}` : (gv[0] || v.game_versions[0] || '');
+        const btn = isMine ? h('span', { class: 'badge ok', text: 'Installed' })
+          : h('button', { class: 'btn small' + (v.compatible ? ' primary' : ''), type: 'button', onclick: e => this.installVersion(pr, v, mine, e.currentTarget) }, ico('download'), mine ? 'Switch to this' : 'Install');
+        return h('li', { class: 'ver' },
+          h('div', { class: 'grow min0' },
+            h('div', { class: 't' }, v.number || v.name, ' ', h('span', { class: 'badge ' + (v.type === 'release' ? 'ok' : v.type === 'beta' ? 'warn' : 'bad'), text: v.type || 'release' }), ' ',
+              v.compatible ? h('span', { class: 'badge info', text: `Works on ${mc}` }) : h('span', { class: 'badge', text: `Not made for ${mc}` })),
+            h('div', { class: 's', text: `Minecraft ${range}, ${v.loaders.join(', ')}, ${(v.date || '').slice(0, 10)}, ${nice(v.downloads)} downloads` }),
+            v.changelog ? h('details', {}, h('summary', { text: 'Changes' }), Md.render(v.changelog)) : null),
+          btn);
+      });
+      list.replaceChildren(h('ul', { class: 'list' }, rows.length ? rows : [h('li', { class: 'none', text: 'No versions found.' })]));
+    };
+    const filter = h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: showAll, onchange: e => { showAll = e.target.checked; drawVersions(); } }),
+      h('span', { text: ` Show every version, also the ones not made for Minecraft ${mc}` }));
+    drawVersions();
+    const gallery = pr.gallery.length ? h('div', { class: 'gallery' }, pr.gallery.map(g => h('img', { src: g.url, alt: g.title || '', loading: 'lazy', referrerpolicy: 'no-referrer' }))) : null;
+    const panes = {
+      versions: () => h('div', {}, mine ? h('p', { class: 'hint', text: `Installed now: ${mine.number}. Choose another version below to switch. Its settings stay.` }) : null, filter, list),
+      about: () => h('div', { class: 'card', style: 'padding:16px' }, gallery, Md.render(pr.body)),
+    };
+    const pane = h('div');
+    const show = id => { pane.replaceChildren(panes[id]()); };
+    const t = tabs([['versions', `Versions`, pr.versions.length], ['about', 'Description']], 'versions', show);
+    this.body.replaceChildren(h('div', { class: 'tools' }, h('button', { class: 'btn', type: 'button', onclick: () => this.draw() }, ico('back'), 'Back to ' + w + 's')), head, t, pane);
+    show('versions');
+  },
+
+  async installVersion(pr, v, mine, btn) {
+    const w = this.word();
+    if (!v.compatible && !await confirmBox(`Install ${pr.title} ${v.number}?`, `This version is not made for Minecraft ${pr.minecraft}. It may not load or may break the server. Install it only if you know it works.`, 'Install anyway', true)) return;
+    await busy(btn, async () => {
+      const r = await api(srvUrl('/plugins/install'), { method: 'POST', json: { project_id: pr.id, version_id: v.id, allow_other_version: !v.compatible, replace_file: mine ? mine.file : '' } });
+      toast(`${pr.title} ${r.version} ${mine ? 'is now installed' : 'installed'}.${r.requires.length ? ' Also needs: ' + r.requires.join(', ') + '.' : ''} Restart the server to load it.`, 'ok');
+    });
+    this.chk = null; this.info = await api(srvUrl('/plugins'));
+    try { this.chk = await api(srvUrl('/plugins/check')); } catch { /* offline: the page still works */ }
+    this.openProject(pr.id, { title: pr.title });
   },
 
   async install(p, btn) {

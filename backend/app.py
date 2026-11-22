@@ -626,7 +626,12 @@ async def plugins_install(request):
     sid = sid_of(request)
     d = await body(request)
     return await run_in_threadpool(plugins.install, sid, str(d.get("project_id", "")), str(d.get("version_id", "")),
-                                   bool(d.get("allow_other_version")))
+                                   bool(d.get("allow_other_version")), str(d.get("replace_file", "")))
+
+
+@api
+async def plugins_project(request):
+    return await run_in_threadpool(plugins.project_page, sid_of(request), request.query_params.get("id", ""))
 
 
 @api
@@ -938,6 +943,7 @@ routes = [
     Route(S + "/plugins/search", plugins_search, methods=["GET"]),
     Route(S + "/plugins/install", plugins_install, methods=["POST"]),
     Route(S + "/plugins/check", plugins_check, methods=["GET"]),
+    Route(S + "/plugins/project", plugins_project, methods=["GET"]),
     Route(S + "/plugins/update", plugins_update, methods=["POST"]),
     Route(S + "/plugins/update-all", plugins_update_all, methods=["POST"]),
     Route(S + "/schedules", get_schedules, methods=["GET"]),

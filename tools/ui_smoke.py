@@ -84,6 +84,12 @@ def main() -> int:
         tab = pg.locator("button:has-text('Find new')").first
         if tab.count():
             tab.click(); pg.wait_for_timeout(600); check("plugin search")
+            link = pg.locator("button.linklike").first
+            if link.count():
+                link.click(); pg.wait_for_timeout(600); check("plugin project page")
+                if args.shots:
+                    pg.screenshot(path=f"{args.shots}/plugin-project.png", full_page=True)
+                pg.locator("button[role=tab]:has-text('Description')").first.click(); pg.wait_for_timeout(300); check("plugin description")
         problems += [f"JS error: {e}" for e in errs]
         b.close()
     for x in problems:

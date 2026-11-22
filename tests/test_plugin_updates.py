@@ -110,6 +110,43 @@ class PluginUpdateTest(unittest.TestCase):
         with self.assertRaises(pl.PluginError):
             pl.update("cccc3333", "Wild.jar")
 
+    def test_project_page_and_specific_version_with_replace(self):
+        pr = {"id": "essx", "slug": "essx", "title": "Essentials", "description": "x", "body": "# Hi", "icon_url": "https://evil.example/i.png",
+              "downloads": 5, "followers": 1, "categories": ["utility"], "license": {"name": "GPL"},
+              "gallery": [{"url": "https://cdn.modrinth.com/g.png", "title": "a"}, {"url": "https://evil.example/g.png"}],
+              "source_url": "https://github.com/x/y", "issues_url": "javascript:alert(1)"}
+        vers = [{"id": "v2", "version_number": "1.1", "game_versions": ["1.21.4"], "loaders": ["paper"], "version_type": "release",
+                 "files": [{"filename": "E-1.1.jar", "primary": True}]},
+                {"id": "v0", "version_number": "0.9", "game_versions": ["1.19"], "loaders": ["paper"], "version_type": "beta",
+                 "files": [{"filename": "E-0.9.jar", "primary": True}]}]
+        with mock.patch.object(pl, "_get", side_effect=lambda path, **k: pr if path == "/project/essx" else vers):
+            page = pl.project_page("cccc3333", "essx")
+        self.assertEqual(page["icon"], "")                                   # not from Modrinth's CDN: dropped
+        self.assertEqual([g["url"] for g in page["gallery"]], ["https://cdn.modrinth.com/g.png"])
+        self.assertEqual(list(page["links"]), ["source"])                    # javascript: link dropped
+        self.assertEqual([(v["number"], v["compatible"]) for v in page["versions"]], [("1.1", True), ("0.9", False)])
+        # install an older version over the installed one: old jar goes, config stays
+        old_ver = {"id": "v0", "project_id": "essx", "version_number": "0.9", "game_versions": ["1.21.4"], "loaders": ["paper"],
+                   "files": [{"filename": "E-0.9.jar", "primary": True, "url": "https://cdn.modrinth.com/o.jar",
+                              "hashes": {"sha1": self.new_sha}}], "dependencies": []}
+        with mock.patch.object(pl, "_get", return_value=old_ver):
+            r = pl.install("cccc3333", "essx", "v0", replace_file="Essentials.jar")
+        self.assertEqual(r["file"], "E-0.9.jar")
+        self.assertFalse((self.d / "Essentials.jar").exists())
+        self.assertTrue((self.d / "E-0.9.jar").exists())
+        self.assertEqual((self.d / "Essentials" / "config.yml").read_text(), "keep")
+
+    def test_incompatible_version_needs_permission(self):
+        ver = {"id": "v9", "project_id": "essx", "version_number": "9", "game_versions": ["1.8"], "loaders": ["paper"],
+               "files": [{"filename": "E-9.jar", "primary": True, "url": "https://cdn.modrinth.com/o.jar", "hashes": {"sha1": self.new_sha}}]}
+        with mock.patch.object(pl, "_get", return_value=ver):
+            with self.assertRaises(pl.PluginError):
+                pl.install("cccc3333", "essx", "v9")
+            self.assertEqual(pl.install("cccc3333", "essx", "v9", allow_other_version=True)["file"], "E-9.jar")
+        with mock.patch.object(pl, "_get", return_value={**ver, "project_id": "other"}):
+            with self.assertRaises(pl.PluginError):
+                pl.install("cccc3333", "essx", "v9", allow_other_version=True)
+
 
 if __name__ == "__main__":
     unittest.main()
