@@ -5,6 +5,18 @@ const DEMO = !!(window.MCP_FORCE_DEMO || location.protocol === 'file:' || new UR
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
+/* The browser turns null into the text "null" in replaceChildren, append and the like. Skip empty values instead,
+   so `cond ? element : null` is always safe. */
+(() => {
+  const empty = x => x == null || x === false || x === true;
+  for (const name of ['replaceChildren', 'append', 'prepend']) {
+    for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+      const orig = proto[name];
+      proto[name] = function (...nodes) { return orig.apply(this, nodes.flat(2).filter(x => !empty(x))); };
+    }
+  }
+})();
+
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
