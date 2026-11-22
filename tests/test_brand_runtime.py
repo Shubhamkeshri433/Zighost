@@ -28,7 +28,7 @@ def serve(app):
 
 class Brand(unittest.TestCase):
     def test_public_and_js(self):
-        self.assertEqual(brand.VERSION, "0.1.0")
+        self.assertEqual(brand.VERSION, "0.1.1")
         js = brand.js()
         self.assertTrue(js.startswith("window.BRAND = "))
         data = json.loads(js[len("window.BRAND = "):].rstrip(";\n"))
