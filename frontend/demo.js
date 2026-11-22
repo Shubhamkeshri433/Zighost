@@ -188,6 +188,9 @@
     if (p.endsWith('/worlds/reset')) { if (D.state !== 'offline') err('Stop the server first.'); return { ok: true }; }
     if (p.endsWith('/worlds')) return { worlds: [{ name: 'world', size: 140_000_000, main: true }, { name: 'world_nether', size: 9_000_000 }, { name: 'world_the_end', size: 6_000_000 }], running: D.state === 'online' };
     if (p.endsWith('/plugins/search')) return { hits: ['LuckPerms', 'Vault', 'Dynmap', 'CoreProtect'].map((t, i) => ({ id: 'p' + i, slug: t.toLowerCase(), title: t, description: 'A popular plugin for your server.', icon: '', downloads: 1_000_000 - i * 150_000, author: 'author' + i })), total: 4, offset: 0 };
+    if (p.endsWith('/plugins/check')) return { version: '1.21.4', counts: { update: 1, no_build: 1, unknown: 0, ok: 0 }, items: { 'EssentialsX.jar': { file: 'EssentialsX.jar', status: 'update', current: '2.20.1', latest: '2.21.0' }, 'WorldEdit.jar.disabled': { file: 'WorldEdit.jar.disabled', status: 'no_build', note: 'No version for 1.21.4.' } } };
+    if (p.endsWith('/plugins/update-all')) return { updated: [{ file: 'EssentialsX.jar', to: '2.21.0', requires: [] }], failed: [] };
+    if (p.endsWith('/plugins/update')) return { file: 'EssentialsX.jar', version: '2.21.0', changed: true, requires: [] };
     if (p.endsWith('/plugins/toggle')) { const x = D.plugins.find(q => q.file === json.file); if (x) x.enabled = json.enabled; return { ok: true }; }
     if (p.endsWith('/plugins/remove')) { D.plugins = D.plugins.filter(q => q.file !== json.file); return { ok: true }; }
     if (p.endsWith('/plugins/install')) { D.plugins.push({ file: json.project_id + '.jar', enabled: true, size: 800_000, title: json.project_id, version: '1.0', description: '' }); return { file: json.project_id + '.jar', version: '1.0', requires: [] }; }

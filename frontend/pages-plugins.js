@@ -2,12 +2,12 @@
 /* Plugins and mods: installed list with on/off switch, search and one-click install from Modrinth, upload a jar. */
 Pages.plugins = {
   title: 'Plugins and mods', nav: 'Plugins', desc: 'Add features to the selected server. Restart the server after a change.', icon: 'plugins', group: 'Server', needsServer: true,
-  sid: null, tab: 'installed', info: null, hits: null, total: 0, offset: 0, query: '', searching: false, installing: new Set(),
+  sid: null, tab: 'installed', info: null, chk: null, checking: false, updating: new Set(), hits: null, total: 0, offset: 0, query: '', searching: false, installing: new Set(),
 
   mount(el) { this.body = el; },
   async show() {
     const srv = currentServer();
-    if (srv && srv.id !== this.sid) { this.sid = srv.id; this.hits = null; this.query = ''; this.offset = 0; }
+    if (srv && srv.id !== this.sid) { this.sid = srv.id; this.hits = null; this.query = ''; this.offset = 0; this.chk = null; }
     await this.load();
   },
   update() { const srv = currentServer(); if (srv && srv.id !== this.sid) this.show(); },
@@ -15,6 +15,52 @@ Pages.plugins = {
   async load() {
     try { this.info = await api(srvUrl('/plugins')); } catch (e) { return fail(e); }
     this.draw();
+    this.runCheck();
+  },
+
+  /* Ask Modrinth which installed files have a newer version, or none at all for this Minecraft version. */
+  async runCheck() {
+    if (!this.info || !this.info.supported || !this.info.items.length || this.checking) return;
+    this.checking = true; const sid = this.sid;
+    try { const r = await api(srvUrl('/plugins/check')); if (sid === this.sid) this.chk = r; }
+    catch (e) { if (sid === this.sid) this.chk = { error: e.message, items: {}, counts: {} }; }
+    finally { this.checking = false; if (sid === this.sid && this.tab === 'installed' && this.pane) this.pane.replaceChildren(this.installed()); }
+  },
+
+  stat(file) { return this.chk && this.chk.items ? this.chk.items[file] : null; },
+
+  async updateOne(p, btn) {
+    this.updating.add(p.file);
+    await busy(btn, async () => {
+      const r = await api(srvUrl('/plugins/update'), { method: 'POST', json: { file: p.file } });
+      toast(`${p.title} updated to ${r.version}.${r.requires.length ? ' Also needs: ' + r.requires.join(', ') + '.' : ''} Restart the server to load it.`, 'ok');
+    }).finally(() => this.updating.delete(p.file));
+    this.chk = null; this.info = await api(srvUrl('/plugins')); this.draw(); this.runCheck();
+  },
+
+  async updateAll(btn) {
+    await busy(btn, async () => {
+      const r = await api(srvUrl('/plugins/update-all'), { method: 'POST' });
+      if (r.updated.length) toast(`${r.updated.length} ${this.word()}${r.updated.length === 1 ? '' : 's'} updated. Restart the server to load them.`, 'ok');
+      if (r.failed.length) fail(new Error(r.failed.map(f => `${f.file}: ${f.error}`).join(' ')));
+    });
+    this.chk = null; this.info = await api(srvUrl('/plugins')); this.draw(); this.runCheck();
+  },
+
+  banners() {
+    const c = this.chk, w = this.word(), out = [];
+    if (this.checking && !c) out.push(h('p', { class: 'hint', text: `Checking for ${w} updates...` }));
+    if (!c) return out;
+    if (c.error) { out.push(h('p', { class: 'hint', text: `Could not check for updates: ${c.error}` })); return out; }
+    const title = f => (this.info.items.find(i => i.file === f) || {}).title || f;
+    const bad = Object.values(c.items).filter(i => i.status === 'no_build').map(i => title(i.file));
+    if (bad.length) out.push(h('div', { class: 'note warn' }, h('strong', { text: `${bad.length} ${w}${bad.length === 1 ? '' : 's'} may not work on Minecraft ${c.version}. ` }),
+      h('span', { text: `${bad.join(', ')}: no version for ${c.version} was found. Turn them off or remove them, or change the server version to one they support.` })));
+    const n = (c.counts || {}).update || 0;
+    if (n) out.push(h('div', { class: 'note', style: 'display:flex;gap:12px;align-items:center' },
+      h('span', { class: 'grow', text: `${n} ${w}${n === 1 ? ' has' : 's have'} an update for Minecraft ${c.version}.` }),
+      h('button', { class: 'btn small primary', type: 'button', onclick: e => this.updateAll(e.currentTarget) }, ico('download'), 'Update all')));
+    return out;
   },
 
   word() { return this.info && this.info.kind === 'mod' ? 'mod' : 'plugin'; },
@@ -49,15 +95,21 @@ Pages.plugins = {
         try { await api(srvUrl('/plugins/toggle'), { method: 'POST', json: { file: p.file, enabled: e.target.checked } }); toast(`${p.title} ${e.target.checked ? 'turned on' : 'turned off'}. Restart to apply.`, 'ok'); this.load(); }
         catch (err) { e.target.checked = !e.target.checked; fail(err); }
       } });
+      const st = this.stat(p.file);
+      const badge = !st ? null : st.status === 'update' ? h('span', { class: 'badge info', text: `Update ${st.current || ''} to ${st.latest}` })
+        : st.status === 'no_build' ? h('span', { class: 'badge warn', title: st.note, text: `No version for ${this.chk.version}` })
+        : st.status === 'ok' ? h('span', { class: 'badge ok', text: 'Up to date' }) : null;
+      const upd = st && st.status === 'update' ? h('button', { class: 'btn small primary', type: 'button', 'aria-label': 'Update ' + p.title, onclick: e => this.updateOne(p, e.currentTarget) }, ico('download'), 'Update') : null;
       return h('li', {}, h('label', { class: 'switch' }, sw, h('i')),
-        h('div', { class: 'grow' }, h('div', { class: 't', text: p.title + (p.version ? ' ' + p.version : '') }),
+        h('div', { class: 'grow' }, h('div', { class: 't' }, p.title + (p.version ? ' ' + p.version : ''), badge ? ' ' : null, badge),
           h('div', { class: 's nowrap', text: p.description || p.file }), p.description ? h('div', { class: 's mono', text: `${p.file}, ${fmtSize(p.size)}` }) : null),
+        upd,
         h('button', { class: 'btn small ghost-danger', type: 'button', 'aria-label': 'Remove ' + p.title, onclick: async () => {
           if (!await confirmBox(`Remove ${p.title}?`, `The file ${p.file} is deleted. Its settings folder stays.`, 'Remove', true)) return;
           busy(null, async () => { await api(srvUrl('/plugins/remove'), { method: 'POST', json: { file: p.file } }); toast('Removed.', 'ok'); this.load(); });
         } }, ico('trash'), 'Remove'));
     });
-    return h('div', {},
+    return h('div', {}, ...this.banners(),
       h('div', { class: 'tools' }, h('span', { class: 'hint', text: `${i.type === 'fabric' ? 'Fabric' : cap(i.type)} ${i.version}. Files are in the ${i.folder} folder.` }), h('span', { class: 'grow' }),
         h('button', { class: 'btn', type: 'button', onclick: () => input.click() }, ico('upload'), `Add a ${w} file (.jar)`), input),
       h('div', { class: 'card' }, h('ul', { class: 'list' }, rows.length ? rows : [h('li', { class: 'none', text: `No ${w}s yet. Open Find new to add some with one click.` })])));

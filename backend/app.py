@@ -625,7 +625,24 @@ async def plugins_search(request):
 async def plugins_install(request):
     sid = sid_of(request)
     d = await body(request)
-    return await run_in_threadpool(plugins.install, sid, str(d.get("project_id", "")))
+    return await run_in_threadpool(plugins.install, sid, str(d.get("project_id", "")), str(d.get("version_id", "")),
+                                   bool(d.get("allow_other_version")))
+
+
+@api
+async def plugins_check(request):
+    return await run_in_threadpool(plugins.check, sid_of(request))
+
+
+@api
+async def plugins_update(request):
+    sid = sid_of(request)
+    return await run_in_threadpool(plugins.update, sid, str((await body(request)).get("file", "")))
+
+
+@api
+async def plugins_update_all(request):
+    return await run_in_threadpool(plugins.update_all, sid_of(request))
 
 
 # ---- schedule / worlds ----------------------------------------------------------
@@ -920,6 +937,9 @@ routes = [
     Route(S + "/plugins/remove", plugins_remove, methods=["POST"]),
     Route(S + "/plugins/search", plugins_search, methods=["GET"]),
     Route(S + "/plugins/install", plugins_install, methods=["POST"]),
+    Route(S + "/plugins/check", plugins_check, methods=["GET"]),
+    Route(S + "/plugins/update", plugins_update, methods=["POST"]),
+    Route(S + "/plugins/update-all", plugins_update_all, methods=["POST"]),
     Route(S + "/schedules", get_schedules, methods=["GET"]),
     Route(S + "/schedules", put_schedules, methods=["PUT"]),
     Route(S + "/worlds", worlds_list, methods=["GET"]),
