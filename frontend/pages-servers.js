@@ -58,9 +58,15 @@ Pages.servers = {
       if (!await confirmBox(`Delete ${s.name}?`, 'Its world, plugins and all its backups are deleted. This cannot be undone.', 'Delete server', true)) return;
       busy(e.currentTarget, async () => { await api('/api/servers/' + s.id, { method: 'DELETE' }); toast('Server deleted.', 'ok'); await refresh(); this.listSig = ''; this.drawList(); });
     } }, ico('trash'));
+    const dup = h('button', { class: 'btn small', type: 'button', 'aria-label': 'Duplicate ' + s.name, title: live ? 'Stop the server first' : 'Make a copy of this server',
+      disabled: live || installing || unfinished || st.install.active, onclick: async () => {
+        const n = await promptBox('Duplicate ' + s.name, 'Name of the copy', `${s.name} duplicate`.slice(0, 40), 'Duplicate');
+        if (!n) return;
+        busy(null, async () => { await api(`/api/servers/${s.id}/duplicate`, { method: 'POST', json: { name: n } }); toast('Copying the server. It gets its own port, and you can rename it in Settings.', 'ok'); await refresh(); });
+      } }, ico('copy'), 'Duplicate');
     return h('article', { class: 'scard' + (live ? ' live' : '') }, head, stateRow, bar, addr,
       h('div', { class: 'scard-actions' }, unfinished ? null : power,
-        h('button', { class: 'btn', type: 'button', disabled: !s.installed, onclick: () => openServer(s.id) }, 'Open'), h('span', { class: 'grow' }), del));
+        h('button', { class: 'btn', type: 'button', disabled: !s.installed, onclick: () => openServer(s.id) }, 'Open'), unfinished ? null : dup, h('span', { class: 'grow' }), del));
   },
 
   /* ---------- wizard ---------- */

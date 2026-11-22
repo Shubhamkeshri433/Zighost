@@ -296,6 +296,12 @@ async def patch_server(request):
 
 
 @api
+async def duplicate_server(request):
+    return {"server": await run_in_threadpool(manager.duplicate_server, sid_of(request),
+                                                 str((await body(request)).get("name", "")))}
+
+
+@api
 async def delete_server(request):
     await run_in_threadpool(manager.delete_server, sid_of(request))
     return {"ok": True}
@@ -875,6 +881,7 @@ routes = [
     Route("/api/servers/{sid}/icon", delete_icon, methods=["DELETE"]),
     Route(S, patch_server, methods=["PATCH"]),
     Route(S, delete_server, methods=["DELETE"]),
+    Route(S + "/duplicate", duplicate_server, methods=["POST"]),
     Route(S + "/start", start_server, methods=["POST"]),
     Route("/api/stop", stop_server, methods=["POST"]),
     Route("/api/restart", restart_server, methods=["POST"]),

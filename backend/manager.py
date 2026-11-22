@@ -21,7 +21,7 @@ import shlex
 
 from . import java_rt, plugins, providers, servericon, verify
 from .props import DEFAULTS, clean_props, read_props, write_props
-from .store import (get_server, get_settings, remove_server, save_server,
+from .store import (get_server, get_settings, list_servers, remove_server, save_server,
                     server_dir, update_server, update_settings, new_server_id, backup_dir)
 
 IS_WIN = sys.platform.startswith("win")
@@ -220,6 +220,81 @@ class Manager:
         if "port" in out:
             write_props(server_dir(sid) / "server.properties", {"server-port": str(out["port"])})
         return meta
+
+    # ---- duplicate --------------------------------------------------------
+    @staticmethod
+    def _dup_name(name: str, taken: set[str]) -> str:
+        base = f"{name[:40 - len(' duplicate 99')]} duplicate"
+        cand, n = base, 2
+        while cand.lower() in taken:
+            cand = f"{base} {n}"
+            n += 1
+        return cand[:40]
+
+    def _dup_port(self, wanted: int) -> int:
+        used = {int(s.get("port", 0)) for s in list_servers()}
+        port = max(1024, min(int(wanted), 65534)) + 1
+        for _ in range(200):
+            if port > 65535:
+                port = 1025
+            if port not in used and self._port_free(port):
+                return port
+            port += 1
+        raise ManagerError("Could not find a free port for the copy. Change the port in its settings.")
+
+    def duplicate_server(self, sid: str, name: str = "") -> dict:
+        """Copy a server (world, plugins, settings) under a new name and port. The original is not changed."""
+        src = get_server(sid)
+        if not src:
+            raise ManagerError("That server was not found.")
+        if not src.get("installed"):
+            raise ManagerError("This server is not finished installing, so it cannot be copied.")
+        if self.active_id == sid and self.busy():
+            raise ManagerError("Stop the server before copying it, so the world is copied safely.")
+        if self.install_job["active"]:
+            raise ManagerError("Another server is still being installed or copied. Wait for it to finish.")
+        sdir = server_dir(sid)
+        need = sum(f.stat().st_size for f in sdir.rglob("*") if f.is_file())
+        free = shutil.disk_usage(sdir).free
+        if free < need + 500 * 1024 * 1024:
+            raise ManagerError(f"The copy needs about {need / 1e9:.1f} GB and only {free / 1e9:.1f} GB is free.")
+        taken = {s["name"].lower() for s in list_servers()}
+        new_id = new_server_id()
+        meta = dict(src)
+        name = (name or "").strip()
+        if len(name) > 40:
+            raise ManagerError("Give the copy a name of up to 40 characters.")
+        meta.update(id=new_id, name=name or self._dup_name(src["name"], taken), port=self._dup_port(int(src["port"])),
+                    installed=False, created=int(time.time()))
+        save_server(meta)
+        self._set_job(active=True, step="Copying", percent=0, error="", server_id=new_id)
+        threading.Thread(target=self._duplicate_thread, args=(sid, new_id), daemon=True).start()
+        return meta
+
+    def _duplicate_thread(self, src_id: str, new_id: str) -> None:
+        sdir, ddir = server_dir(src_id), server_dir(new_id)
+        skip = {"session.lock"}
+        try:
+            files = [f for f in sdir.rglob("*") if f.is_file() and f.name not in skip]
+            total = max(1, len(files))
+            for i, f in enumerate(files):
+                dest = ddir / f.relative_to(sdir)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, dest)
+                if i % 25 == 0:
+                    self._progress("Copying files", int(95 * i / total))
+            ddir.mkdir(parents=True, exist_ok=True)
+            fresh = get_server(new_id)
+            write_props(ddir / "server.properties", {"server-port": str(fresh["port"])})
+            fresh["installed"] = True
+            save_server(fresh)
+            self._set_job(active=False, step="Done", percent=100)
+            self.log(f"{fresh['name']} is ready. It uses port {fresh['port']}.")
+        except Exception as e:  # noqa: BLE001  (show any failure, then remove the half copy)
+            self._set_job(active=False, error=f"Copy failed: {e}", step="Failed")
+            self.log(f"Copy failed: {e}")
+            shutil.rmtree(ddir, ignore_errors=True)
+            remove_server(new_id)
 
     def _progress(self, step: str, pct: int) -> None:
         self._set_job(step=step, percent=max(0, min(100, int(pct))))
