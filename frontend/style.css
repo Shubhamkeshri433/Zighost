@@ -23,6 +23,46 @@
   --warn: #b7791f; --warn-soft: #fdf2d8; --bad: #d63b3b; --bad-soft: #fde4e4; --ok: #2f9e44;
   --log-bg: #f7f8fb; --card-edge: #c3cbdb; color-scheme: light;
 }
+
+/* ---------- Frosted: soft glass on one sheet. Needs no image. On Windows 11 the window itself is see-through (class "glass"). ---------- */
+:root[data-theme="frost"] {
+  --bg: #0d1214; --side: transparent; --panel: rgba(60,72,78,.42); --panel-2: rgba(255,255,255,.08); --panel-3: rgba(255,255,255,.16);
+  --line: rgba(255,255,255,.1); --line-2: rgba(255,255,255,.18); --text: #f4f7f8; --muted: #cbd5d8; --faint: #b0bcc0;
+  --primary: #2f7bff; --primary-hi: #5a98ff; --primary-ink: #ffffff; --primary-soft: rgba(47,123,255,.22);
+  --accent: #7fb0ff; --accent-soft: rgba(47,123,255,.16);
+  --warn: #f2c15a; --warn-soft: rgba(242,193,90,.16); --bad: #ff7b72; --bad-soft: rgba(255,123,114,.16); --ok: #5fd48a;
+  --log-bg: rgba(0,0,0,.3); --card-edge: rgba(255,255,255,.14); --bevel: none; color-scheme: dark;
+}
+:root[data-theme="frost"] body { background: #0d1214; }
+:root[data-theme="frost"].glass body { background: transparent; }
+:root[data-theme="frost"] .app { margin: 22px; min-height: calc(100vh - 44px); border-radius: 34px; background: rgba(120,135,140,.26); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 30px 80px rgba(0,0,0,.35); overflow: clip; }
+:root[data-theme="frost"] .app { backdrop-filter: blur(36px) saturate(120%); }
+:root[data-theme="frost"] .side, :root[data-theme="frost"] .topbar { background: transparent; border: 0; backdrop-filter: none; margin: 0; }
+:root[data-theme="frost"] .side { height: 100vh; top: 0; }
+:root[data-theme="frost"] .update-bar { background: rgba(47,123,255,.2); border: 0; border-radius: 20px; margin: 6px 24px 0; }
+:root[data-theme="frost"] .card, :root[data-theme="frost"] .tile { background: rgba(60,72,78,.42); backdrop-filter: blur(22px); border: 1px solid rgba(255,255,255,.09); border-radius: 26px; box-shadow: 0 8px 26px rgba(0,0,0,.18); }
+:root[data-theme="frost"] .hero { background: rgba(40,52,60,.5); border: 1px solid rgba(255,255,255,.09); border-radius: 28px; backdrop-filter: blur(22px); }
+:root[data-theme="frost"] .log, :root[data-theme="frost"] .mini-log { background: rgba(0,0,0,.3); border: 0; border-radius: 20px; }
+:root[data-theme="frost"] .list > li { background: rgba(255,255,255,.08); border-radius: 18px; }
+:root[data-theme="frost"] .btn { border-radius: 999px; background: rgba(255,255,255,.14); border: 0; box-shadow: none; padding: 8px 18px; }
+:root[data-theme="frost"] .btn:hover:not(:disabled) { background: rgba(255,255,255,.22); }
+:root[data-theme="frost"] .btn.primary { background: var(--primary); color: #fff; }
+:root[data-theme="frost"] .btn.danger { background: #ff6b62; color: #2a0705; }
+:root[data-theme="frost"] .pill, :root[data-theme="frost"] .chip, :root[data-theme="frost"] .addr, :root[data-theme="frost"] .badge { background: rgba(255,255,255,.12); border: 0; border-radius: 999px; box-shadow: none; }
+:root[data-theme="frost"] .addr, :root[data-theme="frost"] input, :root[data-theme="frost"] select, :root[data-theme="frost"] textarea { background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; }
+:root[data-theme="frost"] input[type="checkbox"], :root[data-theme="frost"] input[type="radio"] { border-radius: 50%; }
+:root[data-theme="frost"] #nav button { border-radius: 999px; padding: 9px 14px; }
+:root[data-theme="frost"] #nav button[aria-current] { background: var(--primary); color: #fff; box-shadow: none; }
+:root[data-theme="frost"] #nav button[aria-current] .ico, :root[data-theme="frost"] #nav button[aria-current] svg { color: #fff; }
+:root[data-theme="frost"] .meter-track, :root[data-theme="frost"] .meter-fill { border-radius: 999px; }
+:root[data-theme="frost"] .av, :root[data-theme="frost"] .list canvas, :root[data-theme="frost"] .hero canvas, :root[data-theme="frost"] .hero img, :root[data-theme="frost"] .srv-switch canvas { border-radius: 14px; }
+:root[data-theme="frost"] .seg { border-radius: 999px; border-color: rgba(255,255,255,.14); }
+:root[data-theme="frost"] .banner, :root[data-theme="frost"] .note { border-radius: 18px; }
+:root[data-theme="frost"] .switch i { background: rgba(255,255,255,.2); border: 0; }
+:root[data-theme="frost"] .pathbox { border-radius: 16px; }
+:root[data-theme="frost"] dialog { border-radius: 30px; background: rgba(48,60,66,.82); backdrop-filter: blur(40px); border: 1px solid rgba(255,255,255,.1); }
+:root[data-theme="frost"] .icon-btn { border-radius: 999px; }
+@media (max-width: 760px) { :root[data-theme="frost"] .app { margin: 0; border-radius: 0; min-height: 100vh; } }
 :root {
   --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, Menlo, monospace;
   --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;

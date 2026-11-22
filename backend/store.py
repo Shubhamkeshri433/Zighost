@@ -17,7 +17,7 @@ BACKUPS_DIR = DATA / "backups"
 RUNTIME_DIR = DATA / "runtime"
 
 ID_RE = re.compile(r"^[a-f0-9]{8}$")
-THEMES = ("deepslate", "nether", "daylight")
+THEMES = ("frost", "deepslate", "nether", "daylight")
 
 DEFAULT_SETTINGS = {
     "java_path": "",
@@ -27,7 +27,7 @@ DEFAULT_SETTINGS = {
     "contact": "",              # shown to download APIs (Paper asks for it)
     "playit_auto": True,        # start the playit agent together with the server
     "playit_mode": "managed",   # managed = panel runs its own helper; external = you run playit yourself
-    "theme": "deepslate",
+    "theme": "frost",
     "backup_dir": "",           # one folder for all backups (empty = inside the app's data folder)
     "discord_webhook": "",      # optional Discord webhook link for notices
     "notify_server": False,     # tell Discord when a server starts, stops or crashes
@@ -39,6 +39,7 @@ DEFAULT_SETTINGS = {
     "last_active": "",
     "keep_awake": True,         # Windows: do not let the PC sleep while a server runs
     "toasts": True,             # Windows: tray notices when a server starts, stops or crashes
+    "transparent_window": True, # Windows 11: the window shows a blurred view of the desktop behind it (needs a restart)
 }
 SECRET_KEYS = ("playit_secret", "discord_webhook")      # encrypted on disk (Windows DPAPI)
 
@@ -108,7 +109,7 @@ def update_settings(changes: dict) -> dict:
             else:
                 s[k] = str(v).strip()[:500]
         if s["theme"] not in THEMES:
-            s["theme"] = "deepslate"
+            s["theme"] = "frost"
         if s["playit_mode"] not in ("managed", "external"):
             s["playit_mode"] = "managed"
         try:

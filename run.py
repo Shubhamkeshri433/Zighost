@@ -120,7 +120,8 @@ def _run_window(server, url, backend_app, background, log) -> int:
             log.exception("stop from the tray failed")
 
     shell = Shell(url, on_quit=lambda: setattr(server, "should_exit", True), status=status, stop_servers=stop_servers,
-                  background=background, wait_ready=lambda: _wait_ready(url))
+                  background=background, wait_ready=lambda: _wait_ready(url),
+                  glass=lambda: bool(backend_app.get_settings().get("transparent_window", True)))
     instance.show_callback = shell.show
     backend_app.updates.request_exit = shell.quit
     backend_app.monitor.notifier = shell.notify

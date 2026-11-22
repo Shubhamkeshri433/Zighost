@@ -8,7 +8,7 @@ const STATE_LABEL = { offline: 'Offline', installing: 'Installing', starting: 'S
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function applyTheme(name) {
-  if (!['deepslate', 'nether', 'daylight'].includes(name)) name = 'deepslate';
+  if (!['frost', 'deepslate', 'nether', 'daylight'].includes(name)) name = 'frost';
   document.documentElement.dataset.theme = name;
   store.set('mcp.theme', name);
 }

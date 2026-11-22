@@ -114,7 +114,7 @@ def public_settings() -> dict:
 
 def windows_state() -> dict:
     s = get_settings()
-    return {"available": winos.IS_WINDOWS, "autostart": winos.autostart_get(), "keep_awake": s["keep_awake"], "toasts": s["toasts"]}
+    return {"available": winos.IS_WINDOWS, "autostart": winos.autostart_get(), "keep_awake": s["keep_awake"], "toasts": s["toasts"], "transparent_window": s["transparent_window"], "glass_supported": winos.glass_supported()}
 
 
 @api
@@ -135,7 +135,7 @@ async def put_windows(request):
         if not winos.IS_WINDOWS:
             raise ManagerError("Start with Windows only works on Windows.")
         await run_in_threadpool(winos.autostart_set, bool(d["autostart"]))
-    patch = {k: bool(d[k]) for k in ("keep_awake", "toasts") if k in d}
+    patch = {k: bool(d[k]) for k in ("keep_awake", "toasts", "transparent_window") if k in d}
     if patch:
         update_settings(patch)
     return windows_state()

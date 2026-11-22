@@ -169,7 +169,7 @@ class WindowsApi(unittest.TestCase):
         from backend.app import app
         c = TestClient(app, base_url="http://127.0.0.1", headers={"X-MCPanel": "1"})
         r = c.get("/api/windows").json()
-        self.assertEqual(set(r), {"available", "autostart", "keep_awake", "toasts"})
+        self.assertEqual(set(r), {"available", "autostart", "keep_awake", "toasts", "transparent_window", "glass_supported"})
         r = c.put("/api/windows", json={"keep_awake": False, "toasts": False}).json()
         self.assertFalse(r["keep_awake"]); self.assertFalse(r["toasts"])
         with mock.patch.object(winos, "IS_WINDOWS", False):

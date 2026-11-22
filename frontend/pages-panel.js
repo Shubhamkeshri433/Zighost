@@ -3,6 +3,7 @@
 Pages.panel = {
   title: 'Panel settings', nav: 'Panel', desc: 'How the panel looks and what new servers start with.', icon: 'panel', group: 'Panel', needsServer: false,
   THEMES: [
+    ['frost', 'Frosted', 'Soft glass, blue accent', ['#46545a', '#2c373c', '#2f7bff', '#7fb0ff']],
     ['deepslate', 'Deepslate', 'Dark blue and grass green', ['#13161d', '#1a1e29', '#5cbf4a', '#52c7e0']],
     ['nether', 'Nether', 'Dark red and fire orange', ['#1a1214', '#241719', '#ff7a45', '#c58bff']],
     ['daylight', 'Daylight', 'Light, for bright rooms', ['#eef1f6', '#ffffff', '#2f9e44', '#1c7ed6']],
@@ -29,6 +30,7 @@ Pages.panel = {
     return h('section', { class: 'card', style: 'margin-top:14px' }, h('div', { class: 'card-h' }, h('h2', { text: 'Windows' })),
       row('autostart', `Start ${BRAND.name} when I sign in to Windows`, 'It starts quietly in the tray. Only for your Windows user.'),
       row('keep_awake', 'Keep this PC awake while a server is running', 'Windows will not go to sleep and cut your friends off. It sleeps normally when no server runs.'),
+      this.win.glass_supported ? row('transparent_window', 'Transparent window', 'Shows a blurred view of your desktop behind the window. Restart ' + BRAND.name + ' to apply.') : null,
       row('toasts', 'Show a notice when a server starts, stops or crashes', 'A small Windows notice from the tray icon. Player joins are never shown.'));
   },
 

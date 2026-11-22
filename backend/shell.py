@@ -9,7 +9,7 @@ import threading
 import webbrowser
 from typing import Callable
 
-from . import brand, paths
+from . import brand, paths, winos
 
 log = logging.getLogger(brand.DATA_KEY)
 
@@ -19,6 +19,15 @@ def _import(name: str):
         return __import__(name)
     except Exception:  # noqa: BLE001 - missing, or fails to load on this machine
         return None
+
+
+def close_native_splash() -> None:
+    """The packaged exe shows a splash from the very first millisecond (PyInstaller bootloader). Close it, if there is one."""
+    try:
+        import pyi_splash  # type: ignore[import-not-found]
+        pyi_splash.close()
+    except Exception:  # noqa: BLE001 - not packaged, or no splash
+        pass
 
 
 class Api:
@@ -62,8 +71,10 @@ p{margin:0;color:#8c97ab;font-size:13px}.bar{width:150px;height:3px;background:#
 class Shell:
     def __init__(self, url: str, on_quit: Callable[[], None], status: Callable[[], str],
                  stop_servers: Callable[[], None], background: bool = False, webview=None, pystray=None,
-                 wait_ready: Callable[[], bool] | None = None) -> None:
+                 wait_ready: Callable[[], bool] | None = None, glass: Callable[[], bool] | None = None) -> None:
         self.wait_ready = wait_ready
+        self.glass_wanted = glass or (lambda: False)
+        self.glass_on = False
         self.failed = False
         self.splash = None
         self._navigated = False
@@ -159,20 +170,40 @@ class Shell:
             if not self.background:
                 self.window.maximize()
                 self.window.show()
+            self._glass()
         except Exception:  # noqa: BLE001
             log.exception("could not open the window")
         finally:
+            close_native_splash()
             try:
                 if self.splash is not None:
                     self.splash.destroy()
             except Exception:  # noqa: BLE001
                 pass
 
+    def _glass(self) -> None:
+        """Turn the see-through backdrop on and tell the page. If Windows refuses the page keeps its solid dark look."""
+        if not self.glass_on:
+            return
+        handle = 0
+        try:
+            handle = int(self.window.native.Handle.ToInt64())     # the real window, not the splash with the same title
+        except Exception:  # noqa: BLE001
+            pass
+        ok = winos.apply_backdrop(brand.NAME, handle)
+        log.info("window backdrop: %s", "on" if ok else "not available, solid background")
+        try:
+            self.window.evaluate_js("document.documentElement.classList.%s('glass')" % ("add" if ok else "remove"))
+        except Exception:  # noqa: BLE001
+            pass
+
     def run(self) -> bool:
         """Blocks until the app is quit. False: no window and no tray library, caller should use browser mode."""
         self.icon = self._make_icon()
         if self.icon is not None:
             self.icon.run_detached()
+        if self.background or self.webview is None:
+            close_native_splash()
         if self.webview is not None:
             try:
                 if hasattr(self.webview, "settings"):
@@ -180,9 +211,12 @@ class Shell:
                 if not self.background:
                     self.splash = self.webview.create_window(brand.NAME, html=SPLASH % {"name": brand.NAME}, width=380, height=250,
                                                              frameless=True, easy_drag=True, resizable=False, on_top=True)
+                    self.splash.events.shown += close_native_splash      # hand over to the window of the same look
                 # The real window starts hidden and maximized (full screen area, not floating); people can restore it.
+                self.glass_on = bool(self.glass_wanted()) and winos.glass_supported()
                 self.window = self.webview.create_window(brand.NAME, html="<body style='background:#10141d'></body>", hidden=True,
-                                                         maximized=True, min_size=(980, 640), js_api=Api(), text_select=True)
+                                                         maximized=True, min_size=(980, 640), js_api=Api(), text_select=True,
+                                                         transparent=self.glass_on)
                 self.window.events.closing += self._closing
                 self.window.events.loaded += lambda *_: self._loaded.set() if self._navigated else None
                 self.webview.start(self._boot)      # main thread; returns after destroy()
@@ -194,6 +228,7 @@ class Shell:
                 return True
             except Exception:  # noqa: BLE001 - no WebView2 or it failed: use the browser, keep the tray
                 log.exception("native window failed, using the browser")
+                close_native_splash()
                 self.window = None
         if self.icon is None:
             return False
