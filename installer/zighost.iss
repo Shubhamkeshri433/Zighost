@@ -158,11 +158,11 @@ begin
   end;
 end;
 
-{ Uninstall keeps servers, worlds and backups. Deleting them takes two deliberate steps: answer No to "keep", then type DELETE.
-  A quiet (silent) uninstall never deletes them. }
+{ Uninstall keeps servers, worlds and backups. Deleting them takes two separate questions, and each one defaults to the safe
+  answer. (A typed word is not possible here: the uninstaller has no input box.) A quiet (silent) uninstall never deletes them. }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  dataDir, typed: String;
+  dataDir: String;
   n: Integer;
 begin
   if (CurUninstallStep = usPostUninstall) and (not UninstallSilent) then
@@ -176,10 +176,9 @@ begin
                 'Yes keeps everything (recommended). A new install finds it again.' + #13#10 +
                 'No goes on to delete it for good.', mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
       begin
-        typed := '';
-        if InputQuery('Delete everything for good?',
-                      'This permanently deletes ' + IntToStr(n) + ' server(s), their worlds, backups and settings. It cannot be undone and nothing goes to the Recycle Bin.' + #13#10 +
-                      'Type DELETE to confirm, or press Cancel to keep it all.', typed) and (typed = 'DELETE') then
+        if MsgBox('Really delete ' + IntToStr(n) + ' server(s), their worlds, backups and settings for good?' + #13#10 + #13#10 +
+                  'This cannot be undone, and nothing goes to the Recycle Bin.' + #13#10 + #13#10 +
+                  'Yes deletes everything. No keeps it all.', mbError, MB_YESNO or MB_DEFBUTTON2) = IDYES then
           DelTree(dataDir, True, True, True)
         else
           MsgBox('Nothing was deleted. Your servers are still in:' + #13#10 + dataDir, mbInformation, MB_OK);
