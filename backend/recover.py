@@ -54,6 +54,24 @@ def guess_version(d: Path) -> str:
     return m.group(1) if m else ""
 
 
+def _clean_motd(m: str) -> str:
+    m = re.sub(r"\\u00a7.|\u00a7.", "", m)           # colour codes
+    m = re.sub(r"\\n.*", "", m).strip()
+    return "" if m.lower() in ("", "a minecraft server") else m[:40]
+
+
+def guess_name(d: Path, typ: str, ver: str, motd: str) -> str:
+    """The old name if a backup remembers it, else the motd, else something readable."""
+    try:
+        from . import backups
+        for b in backups.list_backups(d.name):          # newest first
+            if b.get("server"):
+                return b["server"]
+    except Exception:  # noqa: BLE001 - a broken backup folder must not stop the recovery
+        pass
+    return _clean_motd(motd) or f"{typ.capitalize()} {ver}".strip() + " server"
+
+
 def inspect(d: Path) -> dict:
     props = _props(d)
     eula = bool(re.search(r"eula\s*=\s*true", _text(d / "eula.txt"), re.I))
@@ -66,11 +84,12 @@ def inspect(d: Path) -> dict:
         created = int(d.stat().st_ctime)
     except OSError:
         created = int(time.time())
+    typ, ver = guess_type(d), guess_version(d)
     return {
         "id": d.name,
-        "name": "Recovered server",
-        "type": guess_type(d),
-        "version": guess_version(d),
+        "name": guess_name(d, typ, ver, motd),
+        "type": typ,
+        "version": ver,
         "ram_mb": int(store.get_settings().get("default_ram_mb") or 2048),
         "port": port,
         "eula": eula,

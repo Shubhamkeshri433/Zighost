@@ -7,7 +7,7 @@ Pages.servers = {
   mount(el) {
     this.newBtn = h('button', { class: 'btn primary', onclick: () => this.open() }, ico('plus'), 'New server');
     this.list = h('div', { class: 'scards' });
-    this.findBtn = h('button', { class: 'btn', type: 'button', title: 'Look for server folders that are missing from this list', onclick: () => this.recover() }, 'Find servers on disk');
+    this.findBtn = h('button', { class: 'btn icon-only', type: 'button', title: 'Reload: find servers on disk that are missing from this list', 'aria-label': 'Reload servers from disk', onclick: () => this.recover() }, ico('refresh'));
     el.append(h('div', { class: 'tools' }, this.newBtn, this.findBtn), this.list);
   },
 
@@ -41,7 +41,7 @@ Pages.servers = {
       h('p', { text: 'Create your first server in a few steps. Pick a type and version, give it a name and icon, and the panel does the rest.' }),
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', type: 'button', onclick: () => this.open() }, ico('plus'), 'Create your first server'),
-        h('button', { class: 'btn', type: 'button', onclick: () => this.recover() }, 'Find servers on disk')));
+        h('button', { class: 'btn icon-only', type: 'button', title: 'Reload: find servers on disk', 'aria-label': 'Reload servers from disk', onclick: () => this.recover() }, ico('refresh'))));
     this.list.replaceChildren(...(st.servers.length ? [...cards, add] : [empty]));
     this.newBtn.hidden = !st.servers.length;     // with no servers the card below has the only button
   },

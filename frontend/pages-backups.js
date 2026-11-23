@@ -97,21 +97,26 @@ Pages.backups = {
     this.load();
   },
 
-  folderCard() {
+  folderSection() {
     const i = this.info;
     const where = i.own_folder ? 'Chosen for this server' : i.shared_folder ? 'Your default folder from Panel settings' : 'The default folder inside the app data';
     this.moveBox = h('input', { type: 'checkbox', checked: true });
-    return h('section', { class: 'card' }, h('div', { class: 'card-h' }, h('div', {}, h('h2', { text: 'Where backups are saved' }), h('p', { class: 'hint', text: where }))),
+    return h('div', { class: 'bk-sec' }, h('h3', { text: 'Where backups are saved' }), h('p', { class: 'hint', text: where }),
       h('div', { class: 'mono pathbox', title: i.folder, text: i.folder }),
       h('div', { class: 'row-actions', style: 'margin-top:10px' },
         h('button', { class: 'btn', type: 'button', onclick: async e => { const r = await pickPath('folder', i.own_folder || i.shared_folder, 'Backup folder for this server'); if (r) this.setFolder(r, e.currentTarget); } }, ico('files'), 'Choose folder'),
         i.own_folder ? h('button', { class: 'btn', type: 'button', onclick: e => this.setFolder('', e.currentTarget) }, 'Use the default') : null,
         h('button', { class: 'btn', type: 'button', onclick: e => busy(e.currentTarget, () => api('/api/open-folder', { method: 'POST', json: { which: 'backups', sid: this.sid } })) }, 'Open folder')),
       h('label', { class: 'check', style: 'margin-top:10px' }, this.moveBox, h('span', { text: 'Move the backups I already have to the new folder' })),
-      h('p', { class: 'hint', text: 'Any folder works: another drive, a USB disk or a cloud-synced folder. It must not be inside the server itself.' }));
+      h('p', { class: 'hint', text: 'Any folder works: another drive, a USB disk or a cloud-synced folder. It must not be inside the server itself.' }),
+      h('div', { class: 'row-actions', style: 'margin-top:6px' }, h('span', { class: 'hint', text: 'Default for all servers: ' + (i.shared_folder || 'inside the app data folder') }),
+        h('button', { class: 'btn small ghost', type: 'button', onclick: async e => {
+          const r = await pickPath('folder', i.shared_folder, 'Default backup folder for all servers');
+          if (r) await busy(e.currentTarget, async () => { await api('/api/settings', { method: 'PUT', json: { backup_dir: r } }); toast('Default folder saved.', 'ok'); this.load(); });
+        } }, 'Change')));
   },
 
-  optionsCard() {
+  optionsSection() {
     const i = this.info, r = i.rules || {};
     let scope = i.scope;
     const num = (v, id) => h('input', { type: 'number', id, min: 0, value: v || 0, style: 'width:90px' });
@@ -119,18 +124,22 @@ Pages.backups = {
     const onStop = h('input', { type: 'checkbox', checked: i.on_stop });
     const radios = Object.entries(this.SCOPES).map(([v, [t, d]]) => h('label', { class: 'check', style: 'align-items:flex-start' },
       h('input', { type: 'radio', name: 'bk-scope', value: v, checked: scope === v, onchange: () => { scope = v; } }), h('span', {}, h('strong', { text: t }), h('br'), h('span', { class: 'hint', text: d }))));
-    return h('section', { class: 'card' }, h('div', { class: 'card-h' }, h('h2', { text: 'What to save and when' })),
-      h('div', { class: 'field' }, h('strong', { text: 'What a backup contains' })), ...radios,
+    const save = h('button', { class: 'btn primary', type: 'button', onclick: e => busy(e.currentTarget, async () => {
+        const r2 = await api(srvUrl('/backup-options'), { method: 'PUT', json: { scope, on_stop: onStop.checked, rules: { count: +f.count.value, days: +f.days.value, gb: +f.gb.value } } });
+        this.info = r2; toast('Backup options saved.', 'ok');
+      }) }, ico('save'), 'Save options');
+    return h('div', { class: 'bk-sec' }, h('h3', { text: 'What to save and when' }), ...radios,
       h('label', { class: 'check', style: 'margin-top:12px' }, onStop, h('span', { text: 'Also make a backup every time the server stops' })),
-      h('div', { class: 'field', style: 'margin-top:14px' }, h('strong', { text: 'Clean up old backups automatically' }),
-        h('p', { class: 'hint', text: 'Use 0 for no limit. The newest backup is never removed. Safety copies are not counted when they are made.' })),
+      h('h3', { text: 'Clean up old backups', style: 'margin-top:16px' }),
+        h('p', { class: 'hint', text: 'Use 0 for no limit. The newest backup is never removed. Safety copies are not counted when they are made.' }),
       h('div', { class: 'row-actions' }, h('label', { for: 'bk-count', text: 'Keep at most' }), f.count, h('span', { text: 'backups' }),
         h('label', { for: 'bk-days', text: 'Remove older than' }), f.days, h('span', { text: 'days' }),
         h('label', { for: 'bk-gb', text: 'Stay under' }), f.gb, h('span', { text: 'GB' })),
-      h('div', { class: 'form-actions' }, h('button', { class: 'btn primary', type: 'button', onclick: e => busy(e.currentTarget, async () => {
-        const r2 = await api(srvUrl('/backup-options'), { method: 'PUT', json: { scope, on_stop: onStop.checked, rules: { count: +f.count.value, days: +f.days.value, gb: +f.gb.value } } });
-        this.info = r2; toast('Backup options saved.', 'ok');
-      }) }, ico('save'), 'Save options')));
+      h('div', { class: 'form-actions' }, save));
+  },
+
+  settingsCard() {
+    return h('section', { class: 'card bk-settings' }, h('div', { class: 'card-h' }, h('h2', { text: 'Backup settings' })), this.folderSection(), this.optionsSection());
   },
 
   async importZip(btn) {
@@ -174,7 +183,7 @@ Pages.backups = {
         h('div', { class: 'row-actions' }, h('button', { class: 'btn', type: 'button', onclick: e => this.importZip(e.currentTarget) }, ico('upload'), 'Import'),
         h('button', { class: 'btn primary', type: 'button', onclick: e => busy(e.currentTarget, () => this.makeBackup()) }, ico('plus'), 'Back up now'))),
         this.progressEl, h('ul', { class: 'list' }, rows.length ? rows : [h('li', { class: 'none', text: 'No backups yet. Press Back up now, or set a schedule on the Automation page.' })])),
-      this.folderCard(), this.optionsCard(),
+      this.settingsCard(),
       h('section', { class: 'card' }, h('div', { class: 'card-h' }, h('div', {}, h('h2', { text: 'Worlds' }),
         h('p', { class: 'hint', text: running ? 'Stop the server to reset the world.' : 'The folders of this server that hold your worlds.' })), this.resetBtn),
         h('ul', { class: 'list' }, this.worlds.length ? this.worlds.map(w => h('li', {}, ico('files'), h('div', { class: 'grow' }, h('div', { class: 't mono', text: w.name }),

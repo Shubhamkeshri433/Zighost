@@ -48,14 +48,13 @@ Pages.panel = {
       contact: h('input', { type: 'text', id: 'p-contact', value: s.contact, placeholder: 'you@example.com' }),
       java: h('input', { type: 'text', id: 'p-java', value: s.java_path, placeholder: 'Leave empty to find or download Java automatically' }),
       pp: h('input', { type: 'text', id: 'p-pp', value: s.playit_path, placeholder: 'Leave empty to let the panel download its own helper' }),
-      bk: h('input', { type: 'text', id: 'p-bk', value: s.backup_dir || '', placeholder: 'Empty = inside the app data folder' }),
       secret: h('input', { type: 'password', id: 'p-secret', autocomplete: 'new-password' }), clear: h('input', { type: 'checkbox' }),
     };
     const form = h('form', { class: 'card form', autocomplete: 'off', onsubmit: e => {
       e.preventDefault();
       busy(e.submitter, async () => {
         await api('/api/settings', { method: 'PUT', json: { default_ram_mb: +f.ram.value, auto_restart: f.restart.checked, tuned_flags: f.flags.checked, jvm_args: f.jvm.value,
-          contact: f.contact.value, backup_dir: f.bk.value, java_path: f.java.value, playit_path: f.pp.value, playit_secret: f.secret.value, clear_playit_secret: f.clear.checked } });
+          contact: f.contact.value, java_path: f.java.value, playit_path: f.pp.value, playit_secret: f.secret.value, clear_playit_secret: f.clear.checked } });
         toast('Settings saved.', 'ok'); await refresh(); this.draw();
       });
     } },
@@ -66,10 +65,6 @@ Pages.panel = {
       h('div', { class: 'field' }, h('label', { for: 'p-jvm', text: 'Extra Java arguments for every server' }), f.jvm),
       h('div', { class: 'field' }, h('label', { for: 'p-contact', text: 'Your email or website' }), f.contact,
         h('p', { class: 'hint', text: 'PaperMC asks everyone who downloads from them to say who they are. It is only sent to their download service.' })),
-      h('div', { class: 'field' }, h('label', { for: 'p-bk', text: 'Default folder for backups' }),
-        h('div', { class: 'row-actions', style: 'flex-wrap:nowrap' }, f.bk,
-          h('button', { class: 'btn', type: 'button', onclick: async () => { const r = await pickPath('folder', f.bk.value, 'Backup folder'); if (r) f.bk.value = r; } }, ico('files'), 'Browse')),
-        h('p', { class: 'hint', text: 'Every server saves its backups here, in its own sub-folder. Each server can also pick its own folder on its Backups page. Save the settings to apply.' })),
       h('details', { class: 'adv' }, h('summary', { text: 'Advanced: program locations and keys' }),
         h('div', { style: 'margin-top:12px' },
           h('div', { class: 'field' }, h('label', { for: 'p-java', text: 'Java program' }), f.java),
