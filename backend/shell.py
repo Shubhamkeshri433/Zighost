@@ -182,6 +182,13 @@ class Shell:
             except Exception:  # noqa: BLE001
                 pass
 
+    def _decide_glass(self) -> None:
+        """Decide before the window exists whether it is see-through. If so, WebView2 must be told it may be clear,
+        because it paints white otherwise."""
+        self.glass_on = bool(self.glass_wanted()) and winos.glass_supported()
+        if self.glass_on:
+            os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00FFFFFF"
+
     def _glass(self) -> None:
         """Turn the see-through backdrop on and tell the page. If Windows refuses the page keeps its solid dark look."""
         if not self.glass_on:
@@ -214,9 +221,7 @@ class Shell:
                                                              frameless=True, easy_drag=True, resizable=False, on_top=True)
                     self.splash.events.shown += close_native_splash      # hand over to the window of the same look
                 # The real window starts hidden and maximized (full screen area, not floating); people can restore it.
-                self.glass_on = bool(self.glass_wanted()) and winos.glass_supported()
-                if self.glass_on:
-                    os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00FFFFFF"     # WebView2 paints white unless told it may be clear
+                self._decide_glass()
                 self.window = self.webview.create_window(brand.NAME, html="<body style='background:#10141d'></body>", hidden=True,
                                                          maximized=True, min_size=(980, 640), js_api=Api(), text_select=True,
                                                          transparent=self.glass_on)
