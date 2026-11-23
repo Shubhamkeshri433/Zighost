@@ -37,7 +37,7 @@ pyz = PYZ(a.pure)
 # If the build machine cannot make one (no Tcl/Tk), the app is built without it and starts as before.
 try:
     splash = Splash("assets/brand/splash.png", binaries=a.binaries, datas=a.datas, text_pos=None, always_on_top=True)
-    _splash_parts, _splash_bins = [splash], splash.binaries
+    _splash_parts, _splash_bins = [splash], [splash.binaries]       # one list per argument: COLLECT wants it whole, not unpacked
 except (Exception, SystemExit) as e:  # noqa: BLE001
     print("splash skipped:", e)
     _splash_parts, _splash_bins = [], []
