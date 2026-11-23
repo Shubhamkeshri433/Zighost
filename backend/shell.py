@@ -5,7 +5,6 @@ and closing the window quits. run() returns False when neither exists so the cal
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import webbrowser
 from typing import Callable
@@ -72,10 +71,8 @@ p{margin:0;color:#8c97ab;font-size:13px}.bar{width:150px;height:3px;background:#
 class Shell:
     def __init__(self, url: str, on_quit: Callable[[], None], status: Callable[[], str],
                  stop_servers: Callable[[], None], background: bool = False, webview=None, pystray=None,
-                 wait_ready: Callable[[], bool] | None = None, glass: Callable[[], bool] | None = None) -> None:
+                 wait_ready: Callable[[], bool] | None = None) -> None:
         self.wait_ready = wait_ready
-        self.glass_wanted = glass or (lambda: False)
-        self.glass_on = False
         self.failed = False
         self.splash = None
         self._navigated = False
@@ -171,7 +168,6 @@ class Shell:
             if not self.background:
                 self.window.maximize()
                 self.window.show()
-            self._glass()
         except Exception:  # noqa: BLE001
             log.exception("could not open the window")
         finally:
@@ -181,29 +177,6 @@ class Shell:
                     self.splash.destroy()
             except Exception:  # noqa: BLE001
                 pass
-
-    def _decide_glass(self) -> None:
-        """Decide before the window exists whether it is see-through. If so, WebView2 must be told it may be clear,
-        because it paints white otherwise."""
-        self.glass_on = bool(self.glass_wanted()) and winos.glass_supported()
-        if self.glass_on:
-            os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00FFFFFF"
-
-    def _glass(self) -> None:
-        """Turn the see-through backdrop on and tell the page. If Windows refuses the page keeps its solid dark look."""
-        if not self.glass_on:
-            return
-        handle = 0
-        try:
-            handle = int(self.window.native.Handle.ToInt64())     # the real window, not the splash with the same title
-        except Exception:  # noqa: BLE001
-            pass
-        ok = winos.apply_backdrop(brand.NAME, handle)
-        log.info("window backdrop: %s", "on" if ok else "not available, solid background")
-        try:
-            self.window.evaluate_js("document.documentElement.classList.%s('glass')" % ("add" if ok else "remove"))
-        except Exception:  # noqa: BLE001
-            pass
 
     def run(self) -> bool:
         """Blocks until the app is quit. False: no window and no tray library, caller should use browser mode."""
@@ -221,10 +194,8 @@ class Shell:
                                                              frameless=True, easy_drag=True, resizable=False, on_top=True)
                     self.splash.events.shown += close_native_splash      # hand over to the window of the same look
                 # The real window starts hidden and maximized (full screen area, not floating); people can restore it.
-                self._decide_glass()
                 self.window = self.webview.create_window(brand.NAME, html="<body style='background:#10141d'></body>", hidden=True,
-                                                         maximized=True, min_size=(980, 640), js_api=Api(), text_select=True,
-                                                         transparent=self.glass_on)
+                                                         maximized=True, min_size=(980, 640), js_api=Api(), text_select=True)
                 self.window.events.closing += self._closing
                 self.window.events.loaded += lambda *_: self._loaded.set() if self._navigated else None
                 self.webview.start(self._boot)      # main thread; returns after destroy()

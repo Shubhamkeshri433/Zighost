@@ -5,7 +5,7 @@
   const D = {
     consent: { accepted: true, version: 3, current: 3, accepted_at: now() - 86400, heads: false, updates: true },
     comp: { running: false, java: { state: 'missing', percent: 0, text: '' }, playit: { state: 'missing', percent: 0, text: '' } },
-    win: { autostart: false, keep_awake: true, toasts: true, glass_window: true, glass_supported: true },
+    win: { autostart: false, keep_awake: true, toasts: true },
     state: 'online', started: now() - 1860, active: 'a1b2c3d4', players: ['Aarav', 'CreeperKing', 'Steve_Rao'],
     servers: [
       { id: 'a1b2c3d4', name: 'Friends SMP', type: 'paper', version: '1.21.4', ram_mb: 2048, port: 25565, motd: 'Welcome to Friends SMP', installed: true, created: now() - 86400 * 9 },
@@ -14,7 +14,7 @@
     install: { active: false, step: '', percent: 0, error: '', server_id: '' },
     cpu: 14, ram: 1310,
     playit: { state: 'online', claim_url: '', detected_address: 'friends-smp.at.ply.gg:41872', address: 'friends-smp.at.ply.gg:41872', manual: false, error: '', log: ['tunnel running', 'friends-smp.at.ply.gg:41872 => 127.0.0.1:25565'], has_binary: true, mode: 'managed', version: '1.0.0-demo', cmdline: 'playit-agent --demo', other_app_installed: true, account: 'guest', tunnel_note: '', linked: true },
-    settings: { theme: 'frost', playit_mode: 'managed', discord_webhook_set: false, notify_server: false, notify_players: false, java_path: '', playit_path: '', playit_address: '', playit_secret_set: false, contact: '', auto_restart: true, tuned_flags: true, default_ram_mb: 2048, playit_auto: true, last_active: 'a1b2c3d4', playit_mode: 'managed', theme: 'frost', jvm_args: '', discord_webhook_set: false, notify_server: false, notify_players: false, contact: '' },
+    settings: { theme: 'deepslate', playit_mode: 'managed', discord_webhook_set: false, notify_server: false, notify_players: false, java_path: '', playit_path: '', playit_address: '', playit_secret_set: false, contact: '', auto_restart: true, tuned_flags: true, default_ram_mb: 2048, playit_auto: true, last_active: 'a1b2c3d4', playit_mode: 'managed', theme: 'deepslate', jvm_args: '', discord_webhook_set: false, notify_server: false, notify_players: false, contact: '' },
     props: { motd: 'Welcome to Friends SMP', gamemode: 'survival', difficulty: 'normal', 'max-players': '20', pvp: 'true', 'online-mode': 'true', 'white-list': 'false', 'view-distance': '10', 'simulation-distance': '10', 'allow-flight': 'false', 'spawn-protection': '16', 'level-seed': '', 'enable-command-block': 'false', 'server-port': '25565', 'level-name': 'world', 'enable-rcon': 'false' },
     whitelist: ['Aarav', 'Steve_Rao'], ops: [{ name: 'Aarav', level: 4 }], bans: [{ name: 'Griefer99', reason: 'Griefing', created: '2026-11-05', source: 'Aarav' }], ipbans: [],
     known: ['Aarav', 'CreeperKing', 'Steve_Rao', 'Griefer99', 'Alex_M'],

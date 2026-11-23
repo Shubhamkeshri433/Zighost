@@ -298,7 +298,7 @@ class ApiTests(unittest.TestCase):
         r = self.c.put("/api/settings", json={"theme": "nether", "playit_mode": "external"}, headers=HDR).json()
         self.assertEqual((r["theme"], r["playit_mode"]), ("nether", "external"))
         r = self.c.put("/api/settings", json={"theme": "hacked", "playit_mode": "bogus"}, headers=HDR).json()
-        self.assertEqual((r["theme"], r["playit_mode"]), ("frost", "managed"))
+        self.assertEqual((r["theme"], r["playit_mode"]), ("deepslate", "managed"))
         self.assertEqual(self.c.get("/api/status").json()["playit"]["mode"], "managed")
 
     def test_create_server_rejects_bad_props(self):
