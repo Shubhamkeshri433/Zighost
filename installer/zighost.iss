@@ -4,7 +4,7 @@
   #define AppName "Zighost"
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.1"
 #endif
 #ifndef Publisher
   #define Publisher "shubverser"
@@ -139,17 +139,50 @@ begin
     Exec(WebView2File, '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, rc);
 end;
 
-{ Uninstall keeps servers and worlds unless the person says otherwise. }
+{ How many server folders are inside the data folder. }
+function CountServers(const serversDir: String): Integer;
+var
+  rec: TFindRec;
+begin
+  Result := 0;
+  if FindFirst(serversDir + '\*', rec) then
+  begin
+    try
+      repeat
+        if ((rec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and (rec.Name <> '.') and (rec.Name <> '..') then
+          Result := Result + 1;
+      until not FindNext(rec);
+    finally
+      FindClose(rec);
+    end;
+  end;
+end;
+
+{ Uninstall keeps servers, worlds and backups. Deleting them takes two separate questions, and each one defaults to the safe
+  answer. (A typed word is not possible here: the uninstaller has no input box.) A quiet (silent) uninstall never deletes them. }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   dataDir: String;
+  n: Integer;
 begin
   if (CurUninstallStep = usPostUninstall) and (not UninstallSilent) then
   begin
     dataDir := ExpandConstant('{userappdata}\{#DataKey}');
     if DirExists(dataDir) then
-      if MsgBox('Also delete your servers, worlds, backups and settings?' + #13#10 + #13#10 + dataDir + #13#10 + #13#10 +
-                'Choose No to keep them (for example if you plan to install again).', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
-        DelTree(dataDir, True, True, True);
+    begin
+      n := CountServers(dataDir + '\servers');
+      if MsgBox('Keep your servers, worlds, backups and settings?' + #13#10 + #13#10 +
+                'You have ' + IntToStr(n) + ' server(s) in:' + #13#10 + dataDir + #13#10 + #13#10 +
+                'Yes keeps everything (recommended). A new install finds it again.' + #13#10 +
+                'No goes on to delete it for good.', mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+      begin
+        if MsgBox('Really delete ' + IntToStr(n) + ' server(s), their worlds, backups and settings for good?' + #13#10 + #13#10 +
+                  'This cannot be undone, and nothing goes to the Recycle Bin.' + #13#10 + #13#10 +
+                  'Yes deletes everything. No keeps it all.', mbError, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+          DelTree(dataDir, True, True, True)
+        else
+          MsgBox('Nothing was deleted. Your servers are still in:' + #13#10 + dataDir, mbInformation, MB_OK);
+      end;
+    end;
   end;
 end;

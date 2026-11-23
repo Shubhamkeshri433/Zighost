@@ -50,13 +50,16 @@ def _folder(sid: str) -> tuple[Path, str, list[str], dict]:
 
 
 def _info(path: Path) -> dict:
-    out = {"title": "", "version": "", "description": ""}
+    out = {"title": "", "version": "", "description": "", "api_version": ""}
     try:
         with zipfile.ZipFile(path) as z:
             names = set(z.namelist())
             for yml in ("paper-plugin.yml", "plugin.yml"):
                 if yml in names:
                     txt = z.read(yml).decode("utf-8", errors="replace")
+                    m = re.search(r"^api-version:\s*['\"]?(\d+\.\d+)", txt, re.M)
+                    if m:
+                        out["api_version"] = m.group(1)
                     for key in ("name", "version", "description"):
                         m = re.search(rf"^{key}:\s*['\"]?(.+?)['\"]?\s*$", txt, re.M)
                         if m:
@@ -118,6 +121,16 @@ def remove(sid: str, filename: str) -> None:
     _target(sid, filename).unlink()
 
 
+def _post(path: str, payload: dict):
+    try:
+        r = requests.post(API + path, json=payload, timeout=20, headers={"User-Agent": providers.user_agent()})
+    except requests.RequestException:
+        raise PluginError("Could not reach Modrinth. Check your internet connection.") from None
+    if r.status_code != 200:
+        raise PluginError(f"Modrinth answered with error {r.status_code}. Try again in a minute.")
+    return r.json()
+
+
 def _get(path: str, **params):
     try:
         r = requests.get(API + path, params=params, timeout=15, headers={"User-Agent": providers.user_agent()})
@@ -164,27 +177,80 @@ def _other_versions(folder: str, loaders: list[str], current: str) -> list[str]:
     return [v for v in sorted(top, key=key, reverse=True)[:3]]
 
 
-def install(sid: str, project_id: str) -> dict:
-    d, folder, loaders, meta = _folder(sid)
-    if not ID_RE.match(project_id or ""):
-        raise PluginError("That project id is not valid.")
-    versions = _get(f"/project/{project_id}/version", loaders=json.dumps(loaders),
-                    game_versions=json.dumps([meta["version"]]))
-    if not versions:
-        raise PluginError(f"No version made for Minecraft {meta['version']} was found. "
-                          "Try another plugin, or create a server on a version it supports.")
-    versions.sort(key=lambda v: (v.get("version_type") != "release", ))   # stable: releases first, then API order
-    ver = versions[0]
+def _sha1_file(path: Path) -> str:
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _mc_key(v: str) -> tuple:
+    return tuple(int(x) if x.isdigit() else 0 for x in str(v).split(".")[:3])
+
+
+def _primary_file(ver: dict) -> dict:
     files = [f for f in ver.get("files", []) if str(f.get("filename", "")).endswith(".jar")]
     if not files:
         raise PluginError("That version has no .jar file to download.")
-    f = next((x for x in files if x.get("primary")), files[0])
+    return next((x for x in files if x.get("primary")), files[0])
+
+
+def _version_brief(ver: dict) -> dict:
+    return {"id": ver.get("id", ""), "number": ver.get("version_number", ""), "name": ver.get("name", ""),
+            "type": ver.get("version_type", ""), "game_versions": ver.get("game_versions", []),
+            "loaders": ver.get("loaders", []), "date": ver.get("date_published", ""),
+            "downloads": ver.get("downloads", 0), "changelog": (ver.get("changelog") or "")[:4000]}
+
+
+def check(sid: str) -> dict:
+    """For every installed file: is there a newer version, or no version at all for this Minecraft version?
+
+    status: ok (newest for this Minecraft version), update (a newer one exists), no_build (the project has nothing
+    for this Minecraft version, so it may not work), unknown (not from Modrinth, cannot be checked)."""
+    d, folder, loaders, meta = _folder(sid)
+    mc = meta["version"]
+    files = [p for p in sorted(d.iterdir(), key=lambda x: x.name.lower())
+             if d.is_dir() and p.is_file() and (p.name.endswith(".jar") or p.name.endswith(".jar.disabled"))] if d.is_dir() else []
+    out: dict = {"version": mc, "items": {}, "counts": {"update": 0, "no_build": 0, "unknown": 0, "ok": 0}}
+    if not files:
+        return out
+    by_hash = {_sha1_file(p): p for p in files}
+    known = _post("/version_files", {"hashes": list(by_hash), "algorithm": "sha1"}) or {}
+    latest = _post("/version_files/update", {"hashes": [h for h in by_hash if h in known], "algorithm": "sha1",
+                                              "loaders": loaders, "game_versions": [mc]}) if known else {}
+    for h, p in by_hash.items():
+        info = _info(p)
+        item = {"file": p.name, "status": "unknown", "note": ""}
+        cur = known.get(h)
+        if cur:
+            new = (latest or {}).get(h)
+            item["project_id"] = cur.get("project_id", "")
+            item["current"] = cur.get("version_number", "")
+            if new and new.get("id") == cur.get("id"):
+                item["status"] = "ok"
+            elif new:
+                item.update(status="update", latest=new.get("version_number", ""), latest_id=new.get("id", ""),
+                            latest_type=new.get("version_type", ""))
+            else:
+                item["status"] = "no_build"
+                item["note"] = f"Its author has not published a version for Minecraft {mc}."
+        elif info.get("api_version") and _mc_key(info["api_version"]) > _mc_key(mc)[:2]:
+            item["note"] = f"It is made for Minecraft {info['api_version']} or newer, so it may not work on {mc}."
+            item["status"] = "no_build"
+        out["items"][p.name] = item
+        out["counts"][item["status"]] += 1
+    return out
+
+
+def _download_version(d: Path, ver: dict) -> str:
+    """Download one Modrinth version into folder d, check its checksum, return the file name."""
+    f = _primary_file(ver)
     name = clean_name(f["filename"])
     url = f.get("url", "")
     if not url.startswith("https://cdn.modrinth.com/"):
         raise PluginError("The download address was not from Modrinth, so it was not used.")
     d.mkdir(exist_ok=True)
-    dest = d / name
     part = d / (name + ".part")
     sha1 = hashlib.sha1()
     size = 0
@@ -209,14 +275,131 @@ def install(sid: str, project_id: str) -> dict:
     if expected and expected.lower() != sha1.hexdigest():
         part.unlink(missing_ok=True)
         raise PluginError("The downloaded file did not match its checksum, so it was not installed.")
-    part.replace(dest)
+    return name
+
+
+def _requires(ver: dict) -> list[str]:
     deps = [x.get("project_id") for x in ver.get("dependencies", [])
             if x.get("dependency_type") == "required" and x.get("project_id")]
-    dep_names: list[str] = []
+    names: list[str] = []
     if deps:
         try:
             for p in _get("/projects", ids=json.dumps(deps[:10])):
-                dep_names.append(p.get("title", ""))
+                names.append(p.get("title", ""))
         except PluginError:
-            dep_names = ["(could not look up names)"]
-    return {"file": name, "version": ver.get("version_number", ""), "requires": [n for n in dep_names if n]}
+            names = ["(could not look up names)"]
+    return [n for n in names if n]
+
+
+CDN = "https://cdn.modrinth.com/"
+
+
+def _cdn(url) -> str:
+    url = str(url or "")
+    return url if url.startswith(CDN) else ""
+
+
+def project_page(sid: str, project_id: str) -> dict:
+    """Everything the detail page shows for one project: text, pictures and every published version."""
+    _, folder, loaders, meta = _folder(sid)
+    if not ID_RE.match(project_id or ""):
+        raise PluginError("That project id is not valid.")
+    pr = _get(f"/project/{project_id}")
+    versions = _get(f"/project/{project_id}/version")
+    mc = meta["version"]
+    vers = []
+    for v in versions[:150]:
+        b = _version_brief(v)
+        b["compatible"] = mc in b["game_versions"] and bool(set(b["loaders"]) & set(loaders))
+        try:
+            b["filename"] = _primary_file(v)["filename"]
+        except PluginError:
+            continue
+        vers.append(b)
+    links = {k: pr.get(f"{k}_url") for k in ("source", "issues", "wiki", "discord")}
+    return {"id": pr.get("id", project_id), "slug": pr.get("slug", ""), "title": pr.get("title", ""),
+            "summary": pr.get("description", ""), "body": str(pr.get("body") or "")[:60000],
+            "icon": _cdn(pr.get("icon_url")), "downloads": pr.get("downloads", 0), "followers": pr.get("followers", 0),
+            "categories": pr.get("categories", [])[:8], "license": (pr.get("license") or {}).get("name", ""),
+            "gallery": [{"url": _cdn(g.get("url")), "title": g.get("title", "")} for g in pr.get("gallery", []) if _cdn(g.get("url"))][:12],
+            "links": {k: u for k, u in links.items() if isinstance(u, str) and u.startswith(("https://", "http://"))},
+            "minecraft": mc, "versions": vers}
+
+
+def install(sid: str, project_id: str, version_id: str = "", allow_other_version: bool = False,
+            replace_file: str = "") -> dict:
+    """Install the newest release for this server, or one chosen version (version_id). With replace_file the older
+    file of the same plugin is removed once the new one is safely downloaded (its on/off state is kept)."""
+    d, folder, loaders, meta = _folder(sid)
+    if not ID_RE.match(project_id or ""):
+        raise PluginError("That project id is not valid.")
+    if version_id:
+        if not ID_RE.match(version_id):
+            raise PluginError("That version id is not valid.")
+        ver = _get(f"/version/{version_id}")
+        if ver.get("project_id") != project_id:
+            raise PluginError("That version belongs to a different project.")
+        if not set(ver.get("loaders", [])) & set(loaders):
+            raise PluginError("That version is not made for this server type.")
+        if meta["version"] not in ver.get("game_versions", []) and not allow_other_version:
+            raise PluginError(f"That version is not made for Minecraft {meta['version']}.")
+    else:
+        versions = _get(f"/project/{project_id}/version", loaders=json.dumps(loaders),
+                        game_versions=json.dumps([meta["version"]]))
+        if not versions:
+            raise PluginError(f"No version made for Minecraft {meta['version']} was found. "
+                              "Try another plugin, or create a server on a version it supports.")
+        versions.sort(key=lambda v: (v.get("version_type") != "release", ))   # stable: releases first, then API order
+        ver = versions[0]
+    name = _download_version(d, ver)
+    part = d / (name + ".part")
+    old = _target(sid, replace_file) if replace_file else None
+    final = d / (name + (".disabled" if old is not None and old.name.endswith(".disabled") else ""))
+    if old is not None and final != old and final.exists():
+        part.unlink(missing_ok=True)
+        raise PluginError(f"A file named {final.name} already exists. Remove it first.")
+    if old is not None and final != old:
+        old.unlink()
+    part.replace(final)
+    return {"file": final.name, "version": ver.get("version_number", ""), "requires": _requires(ver)}
+
+
+def update(sid: str, filename: str) -> dict:
+    """Replace one installed file by the newest version for this Minecraft version. Its settings folder and its
+    on/off state stay; the old file is removed only after the new one is downloaded and checked."""
+    d, folder, loaders, meta = _folder(sid)
+    old = _target(sid, filename)
+    was_off = old.name.endswith(".disabled")
+    h = _sha1_file(old)
+    known = _post("/version_files", {"hashes": [h], "algorithm": "sha1"}) or {}
+    if h not in known:
+        raise PluginError("This file is not from Modrinth, so it cannot be updated here.")
+    latest = _post("/version_files/update", {"hashes": [h], "algorithm": "sha1", "loaders": loaders,
+                                              "game_versions": [meta["version"]]}) or {}
+    new = latest.get(h)
+    if not new:
+        raise PluginError(f"There is no version for Minecraft {meta['version']} yet.")
+    if new.get("id") == known[h].get("id"):
+        return {"file": old.name, "version": new.get("version_number", ""), "changed": False, "requires": []}
+    name = _download_version(d, new)
+    part = d / (name + ".part")
+    final = d / (name + (".disabled" if was_off else ""))
+    if final != old and final.exists():
+        part.unlink(missing_ok=True)
+        raise PluginError(f"A file named {final.name} already exists. Remove it first.")
+    old.unlink()
+    part.replace(final)
+    return {"file": final.name, "version": new.get("version_number", ""), "changed": True, "requires": _requires(new)}
+
+
+def update_all(sid: str) -> dict:
+    done, failed = [], []
+    for file, item in check(sid)["items"].items():
+        if item["status"] != "update":
+            continue
+        try:
+            r = update(sid, file)
+            done.append({"file": file, "to": r["version"], "requires": r["requires"]})
+        except PluginError as e:
+            failed.append({"file": file, "error": str(e)})
+    return {"updated": done, "failed": failed}

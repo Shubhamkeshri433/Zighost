@@ -9,7 +9,7 @@ import threading
 import webbrowser
 from typing import Callable
 
-from . import brand, paths
+from . import brand, paths, winos
 
 log = logging.getLogger(brand.DATA_KEY)
 
@@ -21,6 +21,15 @@ def _import(name: str):
         return None
 
 
+def close_native_splash() -> None:
+    """The packaged exe shows a splash from the very first millisecond (PyInstaller bootloader). Close it, if there is one."""
+    try:
+        import pyi_splash  # type: ignore[import-not-found]
+        pyi_splash.close()
+    except Exception:  # noqa: BLE001 - not packaged, or no splash
+        pass
+
+
 class Api:
     """Small bridge the page may call (window.pywebview.api)."""
 
@@ -29,6 +38,23 @@ class Api:
             webbrowser.open(url)
             return True
         return False
+
+    def _dialog(self, kind, **kw) -> str:
+        import webview
+        wins = getattr(webview, "windows", [])
+        if not wins:
+            return ""
+        r = wins[0].create_file_dialog(kind, **kw)
+        return str(r[0]) if r else ""
+
+    def pick_folder(self) -> str:
+        """Open the system's folder chooser. Returns the chosen path or an empty string."""
+        import webview
+        return self._dialog(webview.FOLDER_DIALOG)
+
+    def pick_zip(self) -> str:
+        import webview
+        return self._dialog(webview.OPEN_DIALOG, file_types=("Zip files (*.zip)",))
 
 
 SPLASH = """<!doctype html><meta charset="utf-8"><title>%(name)s</title>
@@ -145,6 +171,7 @@ class Shell:
         except Exception:  # noqa: BLE001
             log.exception("could not open the window")
         finally:
+            close_native_splash()
             try:
                 if self.splash is not None:
                     self.splash.destroy()
@@ -156,6 +183,8 @@ class Shell:
         self.icon = self._make_icon()
         if self.icon is not None:
             self.icon.run_detached()
+        if self.background or self.webview is None:
+            close_native_splash()
         if self.webview is not None:
             try:
                 if hasattr(self.webview, "settings"):
@@ -163,6 +192,7 @@ class Shell:
                 if not self.background:
                     self.splash = self.webview.create_window(brand.NAME, html=SPLASH % {"name": brand.NAME}, width=380, height=250,
                                                              frameless=True, easy_drag=True, resizable=False, on_top=True)
+                    self.splash.events.shown += close_native_splash      # hand over to the window of the same look
                 # The real window starts hidden and maximized (full screen area, not floating); people can restore it.
                 self.window = self.webview.create_window(brand.NAME, html="<body style='background:#10141d'></body>", hidden=True,
                                                          maximized=True, min_size=(980, 640), js_api=Api(), text_select=True)
@@ -177,6 +207,7 @@ class Shell:
                 return True
             except Exception:  # noqa: BLE001 - no WebView2 or it failed: use the browser, keep the tray
                 log.exception("native window failed, using the browser")
+                close_native_splash()
                 self.window = None
         if self.icon is None:
             return False

@@ -33,6 +33,14 @@ def _version_file():
 
 a = Analysis(["run.py"], pathex=["."], datas=[("frontend", "frontend")], hiddenimports=hidden, excludes=["tkinter", "unittest", "pytest"])
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=brand.NAME, console=False, icon="assets/brand/zighost.ico",
+# The splash is drawn by the exe's own bootloader before Python starts, so it shows at once on double-click.
+# If the build machine cannot make one (no Tcl/Tk), the app is built without it and starts as before.
+try:
+    splash = Splash("assets/brand/splash.png", binaries=a.binaries, datas=a.datas, text_pos=None, always_on_top=True)
+    _splash_parts, _splash_bins = [splash], [splash.binaries]       # one list per argument: COLLECT wants it whole, not unpacked
+except (Exception, SystemExit) as e:  # noqa: BLE001
+    print("splash skipped:", e)
+    _splash_parts, _splash_bins = [], []
+exe = EXE(pyz, a.scripts, *_splash_parts, [], exclude_binaries=True, name=brand.NAME, console=False, icon="assets/brand/zighost.ico",
           version=_version_file())
-coll = COLLECT(exe, a.binaries, a.datas, name=brand.NAME)
+coll = COLLECT(exe, a.binaries, a.datas, *_splash_bins, name=brand.NAME)

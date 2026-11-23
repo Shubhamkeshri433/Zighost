@@ -19,9 +19,9 @@ import requests
 
 import shlex
 
-from . import java_rt, plugins, providers, servericon, verify
+from . import backups, java_rt, plugins, providers, servericon, verify
 from .props import DEFAULTS, clean_props, read_props, write_props
-from .store import (get_server, get_settings, remove_server, save_server,
+from .store import (get_server, get_settings, list_servers, remove_server, save_server,
                     server_dir, update_server, update_settings, new_server_id, backup_dir)
 
 IS_WIN = sys.platform.startswith("win")
@@ -221,6 +221,152 @@ class Manager:
             write_props(server_dir(sid) / "server.properties", {"server-port": str(out["port"])})
         return meta
 
+    # ---- duplicate --------------------------------------------------------
+    @staticmethod
+    def _dup_name(name: str, taken: set[str]) -> str:
+        base = f"{name[:40 - len(' duplicate 99')]} duplicate"
+        cand, n = base, 2
+        while cand.lower() in taken:
+            cand = f"{base} {n}"
+            n += 1
+        return cand[:40]
+
+    def _dup_port(self, wanted: int) -> int:
+        used = {int(s.get("port", 0)) for s in list_servers()}
+        port = max(1024, min(int(wanted), 65534)) + 1
+        for _ in range(200):
+            if port > 65535:
+                port = 1025
+            if port not in used and self._port_free(port):
+                return port
+            port += 1
+        raise ManagerError("Could not find a free port for the copy. Change the port in its settings.")
+
+    def duplicate_server(self, sid: str, name: str = "", restore: tuple[str, str] | None = None) -> dict:
+        """Copy a server (world, plugins, settings) under a new name and port. The original is not changed."""
+        src = get_server(sid)
+        if not src:
+            raise ManagerError("That server was not found.")
+        if not src.get("installed"):
+            raise ManagerError("This server is not finished installing, so it cannot be copied.")
+        if self.active_id == sid and self.busy():
+            raise ManagerError("Stop the server before copying it, so the world is copied safely.")
+        if self.install_job["active"]:
+            raise ManagerError("Another server is still being installed or copied. Wait for it to finish.")
+        sdir = server_dir(sid)
+        need = sum(f.stat().st_size for f in sdir.rglob("*") if f.is_file())
+        free = shutil.disk_usage(sdir).free
+        if free < need + 500 * 1024 * 1024:
+            raise ManagerError(f"The copy needs about {need / 1e9:.1f} GB and only {free / 1e9:.1f} GB is free.")
+        taken = {s["name"].lower() for s in list_servers()}
+        new_id = new_server_id()
+        meta = dict(src)
+        name = (name or "").strip()
+        if len(name) > 40:
+            raise ManagerError("Give the copy a name of up to 40 characters.")
+        if restore:                                   # restore a backup into the copy instead of the original
+            zp = backups.backup_dir(sid) / backups.safe_name(restore[0])
+            if not zp.is_file():
+                raise ManagerError("That backup was not found.")
+        meta.update(id=new_id, name=name or self._dup_name(src["name"], taken), port=self._dup_port(int(src["port"])),
+                    installed=False, created=int(time.time()), backup_dir="")
+        save_server(meta)
+        self._set_job(active=True, step="Copying", percent=0, error="", server_id=new_id)
+        threading.Thread(target=self._duplicate_thread, args=(sid, new_id, restore), daemon=True).start()
+        return meta
+
+    def _duplicate_thread(self, src_id: str, new_id: str, restore: tuple[str, str] | None = None) -> None:
+        sdir, ddir = server_dir(src_id), server_dir(new_id)
+        skip = {"session.lock"}
+        try:
+            files = [f for f in sdir.rglob("*") if f.is_file() and f.name not in skip]
+            total = max(1, len(files))
+            for i, f in enumerate(files):
+                dest = ddir / f.relative_to(sdir)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, dest)
+                if i % 25 == 0:
+                    self._progress("Copying files", int(95 * i / total))
+            ddir.mkdir(parents=True, exist_ok=True)
+            if restore:
+                self._progress("Restoring the backup", 96)
+                backups.restore_into(ddir, backups.backup_dir(src_id) / restore[0], restore[1])
+            fresh = get_server(new_id)
+            write_props(ddir / "server.properties", {"server-port": str(fresh["port"])})
+            fresh["installed"] = True
+            save_server(fresh)
+            self._set_job(active=False, step="Done", percent=100)
+            self.log(f"{fresh['name']} is ready. It uses port {fresh['port']}.")
+        except Exception as e:  # noqa: BLE001  (show any failure, then remove the half copy)
+            self._set_job(active=False, error=f"Copy failed: {e}", step="Failed")
+            self.log(f"Copy failed: {e}")
+            shutil.rmtree(ddir, ignore_errors=True)
+            remove_server(new_id)
+
+    # ---- change the Minecraft version of a server ---------------------------
+    # Files that belong to one Minecraft version. They are deleted after a version change and the server makes them
+    # again on the next start. The world, plugins, mods and every setting are never in this list.
+    VERSION_FILES = ("libraries", "versions", "cache", ".fabric", "_build", "plugins/.paper-remapped")
+
+    def change_version(self, sid: str, version: str, backup: bool = True) -> dict:
+        meta = get_server(sid)
+        if not meta:
+            raise ManagerError("That server was not found.")
+        if not meta.get("installed"):
+            raise ManagerError("This server is not finished installing.")
+        if self.active_id == sid and self.busy():
+            raise ManagerError("Stop the server before changing its version.")
+        if self.install_job["active"]:
+            raise ManagerError("Another server is being installed or changed. Wait for it to finish.")
+        version = str(version or "").strip()
+        if version == meta["version"]:
+            raise ManagerError(f"This server already uses {version}.")
+        if version not in providers.list_versions(meta["type"]):
+            raise ManagerError(f"{providers.TYPES.get(meta['type'], {}).get('label', meta['type'])} has no version {version}.")
+        downgrade = providers._vkey(version) < providers._vkey(meta["version"])
+        self._set_job(active=True, step="Preparing", percent=0, error="", server_id=sid)
+        threading.Thread(target=self._change_version_thread, args=(sid, version, backup or downgrade, downgrade), daemon=True).start()
+        return {"from": meta["version"], "to": version, "downgrade": downgrade, "backup": backup or downgrade}
+
+    def _change_version_thread(self, sid: str, version: str, backup: bool, downgrade: bool) -> None:
+        d = server_dir(sid)
+        new_jar = d / "server.jar.new"
+        try:
+            meta = get_server(sid)
+            self._progress("Looking up version", 2)
+            info = providers.resolve(meta["type"], version)
+            need_java = providers.java_required(version)
+            self.ensure_java(need_java, jdk=(info["kind"] == "buildtools"))
+            if backup:
+                self._progress("Saving a backup first", 5)
+                b = backups.create_backup(sid, "before-update")
+                self.log(f"Backup saved before changing the version: {b['name']}.")
+            if info["kind"] == "jar":
+                self._download(info["url"], new_jar, f"Downloading {version}", expect=info.get("hash"))
+            else:
+                self._build_spigot(info["url"], version, d, need_java, dest=new_jar)
+            new_jar.replace(d / "server.jar")
+            self._progress("Removing old version files", 95)
+            for rel in self.VERSION_FILES:
+                target = d.joinpath(*rel.split("/"))
+                if target.is_dir():
+                    shutil.rmtree(target, ignore_errors=True)
+            fresh = get_server(sid) or meta
+            old = fresh["version"]
+            fresh["version"] = version
+            fresh["version_changed"] = {"from": old, "to": version, "at": int(time.time())}
+            save_server(fresh)
+            self._set_job(active=False, step="Done", percent=100)
+            self.log(f"{fresh['name']} now uses {providers.TYPES[fresh['type']]['label']} {version}. Your world and settings were kept."
+                     + (" This is an older version than before: if the server does not start, restore the backup." if downgrade else ""))
+        except Exception as e:  # noqa: BLE001  (the old version stays in place, so the server still works)
+            new_jar.unlink(missing_ok=True)
+            new_jar.with_suffix(".jar.part").unlink(missing_ok=True)
+            msg = str(e) if isinstance(e, (ManagerError, providers.ProviderError, java_rt.JavaError, backups.BackupError)) \
+                else f"Version change failed: {e.__class__.__name__}: {e}"
+            self._set_job(active=False, error=msg + " Nothing was changed.", step="Failed")
+            self.log(msg)
+
     def _progress(self, step: str, pct: int) -> None:
         self._set_job(step=step, percent=max(0, min(100, int(pct))))
 
@@ -315,7 +461,7 @@ class Manager:
             self.log(f"{label}: the publisher lists no checksum for this file, so it could not be verified.")
         part.replace(dest)
 
-    def _build_spigot(self, url: str, version: str, d: Path, java_major: int) -> None:
+    def _build_spigot(self, url: str, version: str, d: Path, java_major: int, dest: Path | None = None) -> None:
         work = d / "_build"
         work.mkdir(exist_ok=True)
         self._download(url, work / "BuildTools.jar", "Downloading BuildTools")
@@ -338,7 +484,7 @@ class Manager:
         jars = sorted(work.glob("spigot-*.jar"))
         if not jars:
             raise ManagerError("Spigot build finished but no jar was produced.")
-        shutil.copy2(jars[-1], d / "server.jar")
+        shutil.copy2(jars[-1], dest or d / "server.jar")
         shutil.rmtree(work, ignore_errors=True)
 
     # ---- delete -----------------------------------------------------------
@@ -348,7 +494,7 @@ class Manager:
         if self.install_job["active"] and self.install_job["server_id"] == sid:
             raise ManagerError("This server is still installing.")
         shutil.rmtree(server_dir(sid), ignore_errors=True)
-        shutil.rmtree(backup_dir(sid), ignore_errors=True)
+        backups.purge(sid)
         remove_server(sid)
         if self.active_id == sid:
             self.active_id = None
@@ -491,6 +637,8 @@ class Manager:
                 self.state = "offline"
                 self.log("Server stopped.")
                 self._emit("server", f"{self._name(sid)} stopped.")
+                if (get_server(sid) or {}).get("backup_on_stop"):
+                    threading.Thread(target=self._backup_after_stop, args=(sid,), daemon=True).start()
                 return
             self.state = "crashed"
             self.log(f"Server stopped unexpectedly (exit code {code}).")
@@ -502,6 +650,13 @@ class Manager:
                 threading.Timer(5, self._auto_restart, args=(sid,)).start()
             elif len(self.crashes) > 3:
                 self.log("Crashed 3 times in 10 minutes. Auto-restart is paused. Check the log above.")
+
+    def _backup_after_stop(self, sid: str) -> None:
+        try:
+            info = backups.create_backup(sid, "on-stop")
+            self.log(f"Backup saved after the server stopped: {info['name']}.")
+        except (backups.BackupError, OSError) as e:
+            self.log(f"Backup after stopping failed: {e}")
 
     def _auto_restart(self, sid: str) -> None:
         if self.state != "crashed":

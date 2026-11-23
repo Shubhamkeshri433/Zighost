@@ -28,6 +28,7 @@ DEFAULT_SETTINGS = {
     "playit_auto": True,        # start the playit agent together with the server
     "playit_mode": "managed",   # managed = panel runs its own helper; external = you run playit yourself
     "theme": "deepslate",
+    "backup_dir": "",           # one folder for all backups (empty = inside the app's data folder)
     "discord_webhook": "",      # optional Discord webhook link for notices
     "notify_server": False,     # tell Discord when a server starts, stops or crashes
     "notify_players": False,    # tell Discord when a player joins or leaves
@@ -147,7 +148,8 @@ def save_server(meta: dict) -> None:
 
 def update_server(sid: str, changes: dict) -> dict:
     """Change fields of one server record. Only the listed keys can be changed this way."""
-    allowed = {"name", "ram_mb", "port", "motd", "jvm_args", "notes", "schedules", "pending_props"}
+    allowed = {"name", "ram_mb", "port", "motd", "jvm_args", "notes", "schedules", "pending_props",
+               "backup_dir", "backup_rules", "backup_scope", "backup_on_stop"}
     with _lock:
         meta = get_server(sid)
         if not meta:
@@ -178,6 +180,13 @@ def server_dir(sid: str) -> Path:
 
 
 def backup_dir(sid: str) -> Path:
+    """Where this server's backups are kept: its own chosen folder, else <default folder>/<id>, else the app's data folder."""
     if not valid_id(sid):
         raise ValueError("Invalid server id")
+    own = str((get_server(sid) or {}).get("backup_dir") or "").strip()
+    if own:
+        return Path(own)
+    shared = str(get_settings().get("backup_dir") or "").strip()
+    if shared:
+        return Path(shared) / sid
     return BACKUPS_DIR / sid

@@ -296,6 +296,25 @@ async def patch_server(request):
 
 
 @api
+async def recover_servers(request):
+    from . import recover
+    found = await run_in_threadpool(recover.recover)
+    return {"servers": found, "count": len(found)}
+
+
+@api
+async def duplicate_server(request):
+    return {"server": await run_in_threadpool(manager.duplicate_server, sid_of(request),
+                                                 str((await body(request)).get("name", "")))}
+
+
+@api
+async def change_version(request):
+    d = await body(request)
+    return await run_in_threadpool(manager.change_version, sid_of(request), str(d.get("version", "")), bool(d.get("backup", True)))
+
+
+@api
 async def delete_server(request):
     await run_in_threadpool(manager.delete_server, sid_of(request))
     return {"ok": True}
@@ -412,12 +431,69 @@ async def put_props(request):
 
 # ---- backups ------------------------------------------------------------------
 
+def _backup_state(sid: str) -> dict:
+    meta = need_server(sid)
+    d = backups.backup_dir(sid)
+    shared = str(get_settings().get("backup_dir") or "")
+    return {"backups": backups.list_backups(sid), "folder": str(d), "own_folder": meta.get("backup_dir", ""), "shared_folder": shared,
+            "scope": meta.get("backup_scope") if meta.get("backup_scope") in backups.SCOPES else "standard",
+            "on_stop": bool(meta.get("backup_on_stop")), "rules": meta.get("backup_rules") or {"count": 0, "days": 0, "gb": 0},
+            "version": meta.get("version", ""), "type": meta.get("type", ""), "running": is_running(sid)}
+
+
 @api
 async def get_backups(request):
-    return {"backups": backups.list_backups(sid_of(request))}
+    return await run_in_threadpool(_backup_state, sid_of(request))
 
 
-def _backup_now(sid: str, label: str = "manual") -> dict:
+@api
+async def backup_progress(request):
+    return backups.progress(sid_of(request))
+
+
+@api
+async def backup_options(request):
+    """Change where and how this server's backups are made."""
+    sid = sid_of(request)
+    d = await body(request)
+    changes: dict = {}
+    if "folder" in d:
+        raw = str(d["folder"] or "").strip()
+        old = backups.backup_dir(sid)
+        if raw:
+            raw = backups.check_folder(raw)["path"]
+        changes["backup_dir"] = raw
+        update_server(sid, changes)
+        if d.get("move"):
+            try:
+                n = await run_in_threadpool(backups.move_backups, old, backups.backup_dir(sid))
+            except (backups.BackupError, OSError) as e:
+                update_server(sid, {"backup_dir": need_server(sid).get("backup_dir", "")})
+                raise ManagerError(f"Could not move the old backups: {e}") from None
+            changes["moved"] = n
+    if "scope" in d:
+        if d["scope"] not in backups.SCOPES:
+            raise ManagerError("Choose what to back up.")
+        update_server(sid, {"backup_scope": d["scope"]})
+    if "on_stop" in d:
+        update_server(sid, {"backup_on_stop": bool(d["on_stop"])})
+    if "rules" in d:
+        r = d["rules"] or {}
+        try:
+            rules = {"count": max(0, min(500, int(r.get("count") or 0))), "days": max(0, min(3650, int(r.get("days") or 0))),
+                     "gb": max(0, min(100000, int(r.get("gb") or 0)))}
+        except (TypeError, ValueError):
+            raise ManagerError("Use whole numbers for the clean-up rules.") from None
+        update_server(sid, {"backup_rules": rules})
+    return await run_in_threadpool(_backup_state, sid)
+
+
+@api
+async def backup_check_folder(request):
+    return await run_in_threadpool(backups.check_folder, str((await body(request)).get("path", "")))
+
+
+def _backup_now(sid: str, label: str = "manual", scope: str | None = None) -> dict:
     running = manager.active_id == sid and manager.state == "online"
     if running:
         try:
@@ -427,7 +503,7 @@ def _backup_now(sid: str, label: str = "manual") -> dict:
         except ManagerError:
             running = False
     try:
-        return backups.create_backup(sid, label)
+        return backups.create_backup(sid, label, scope)
     finally:
         if running:
             with contextlib.suppress(ManagerError):
@@ -452,7 +528,29 @@ async def post_open_folder(request):
 
 @api
 async def post_backup(request):
-    return {"backup": await run_in_threadpool(_backup_now, sid_of(request))}
+    d = await body(request)
+    return {"backup": await run_in_threadpool(_backup_now, sid_of(request), "manual", d.get("scope"))}
+
+
+@api
+async def verify_backup(request):
+    return await run_in_threadpool(backups.verify, sid_of(request), request.path_params["name"])
+
+
+@api
+async def import_backup(request):
+    return {"backup": await run_in_threadpool(backups.import_backup, sid_of(request), str((await body(request)).get("path", "")))}
+
+
+@api
+async def restore_backup_new(request):
+    d = await body(request)
+    sid = sid_of(request)
+    mode = d.get("mode", "all")
+    if mode not in backups.MODES:
+        raise ManagerError("Unknown restore kind.")
+    meta = await run_in_threadpool(manager.duplicate_server, sid, str(d.get("name", "")), (request.path_params["name"], mode))
+    return {"server": meta}
 
 
 @api
@@ -466,8 +564,12 @@ async def restore_backup(request):
     sid = sid_of(request)
     if is_running(sid):
         raise ManagerError("Stop the server before restoring a backup.")
-    await run_in_threadpool(backups.restore_backup, sid, request.path_params["name"])
-    return {"ok": True}
+    d = await body(request)
+    mode = d.get("mode", "all")
+    if mode not in backups.MODES:
+        raise ManagerError("Unknown restore kind.")
+    n = await run_in_threadpool(backups.restore_backup, sid, request.path_params["name"], mode, bool(d.get("safety", True)))
+    return {"ok": True, "files": n}
 
 
 @api
@@ -613,7 +715,29 @@ async def plugins_search(request):
 async def plugins_install(request):
     sid = sid_of(request)
     d = await body(request)
-    return await run_in_threadpool(plugins.install, sid, str(d.get("project_id", "")))
+    return await run_in_threadpool(plugins.install, sid, str(d.get("project_id", "")), str(d.get("version_id", "")),
+                                   bool(d.get("allow_other_version")), str(d.get("replace_file", "")))
+
+
+@api
+async def plugins_project(request):
+    return await run_in_threadpool(plugins.project_page, sid_of(request), request.query_params.get("id", ""))
+
+
+@api
+async def plugins_check(request):
+    return await run_in_threadpool(plugins.check, sid_of(request))
+
+
+@api
+async def plugins_update(request):
+    sid = sid_of(request)
+    return await run_in_threadpool(plugins.update, sid, str((await body(request)).get("file", "")))
+
+
+@api
+async def plugins_update_all(request):
+    return await run_in_threadpool(plugins.update_all, sid_of(request))
 
 
 # ---- schedule / worlds ----------------------------------------------------------
@@ -688,6 +812,8 @@ async def put_settings(request):
         d.pop("discord_webhook", None)   # blank box means "keep the saved link"
     elif not notify.valid_webhook(str(d["discord_webhook"]).strip()):
         raise ManagerError("That is not a Discord webhook link. It starts with https://discord.com/api/webhooks/")
+    if str(d.get("backup_dir", "")).strip():
+        d["backup_dir"] = backups.check_folder(str(d["backup_dir"]))["path"]
     if "jvm_args" in d:
         from .manager import parse_jvm_args
         parse_jvm_args(str(d["jvm_args"]))
@@ -870,11 +996,14 @@ routes = [
     Route("/api/system", system),
     Route("/api/versions", versions),
     Route("/api/servers", create_server, methods=["POST"]),
+    Route("/api/servers/recover", recover_servers, methods=["POST"]),
     Route("/api/servers/{sid}/icon", get_icon, methods=["GET"]),
     Route("/api/servers/{sid}/icon", put_icon, methods=["PUT"]),
     Route("/api/servers/{sid}/icon", delete_icon, methods=["DELETE"]),
     Route(S, patch_server, methods=["PATCH"]),
     Route(S, delete_server, methods=["DELETE"]),
+    Route(S + "/duplicate", duplicate_server, methods=["POST"]),
+    Route(S + "/version", change_version, methods=["POST"]),
     Route(S + "/start", start_server, methods=["POST"]),
     Route("/api/stop", stop_server, methods=["POST"]),
     Route("/api/restart", restart_server, methods=["POST"]),
@@ -888,6 +1017,12 @@ routes = [
     Route("/api/head/{name}", get_head, methods=["GET"]),
     Route(S + "/backups", get_backups, methods=["GET"]),
     Route(S + "/backups", post_backup, methods=["POST"]),
+    Route(S + "/backups/progress", backup_progress, methods=["GET"]),
+    Route(S + "/backups/import", import_backup, methods=["POST"]),
+    Route(S + "/backup-options", backup_options, methods=["PUT"]),
+    Route("/api/backup-folder/check", backup_check_folder, methods=["POST"]),
+    Route(S + "/backups/{name}/verify", verify_backup, methods=["POST"]),
+    Route(S + "/backups/{name}/restore-new", restore_backup_new, methods=["POST"]),
     Route(S + "/backups/{name}", delete_backup, methods=["DELETE"]),
     Route(S + "/backups/{name}/restore", restore_backup, methods=["POST"]),
     Route(S + "/backups/{name}/download", download_backup, methods=["GET"]),
@@ -906,6 +1041,10 @@ routes = [
     Route(S + "/plugins/remove", plugins_remove, methods=["POST"]),
     Route(S + "/plugins/search", plugins_search, methods=["GET"]),
     Route(S + "/plugins/install", plugins_install, methods=["POST"]),
+    Route(S + "/plugins/check", plugins_check, methods=["GET"]),
+    Route(S + "/plugins/project", plugins_project, methods=["GET"]),
+    Route(S + "/plugins/update", plugins_update, methods=["POST"]),
+    Route(S + "/plugins/update-all", plugins_update_all, methods=["POST"]),
     Route(S + "/schedules", get_schedules, methods=["GET"]),
     Route(S + "/schedules", put_schedules, methods=["PUT"]),
     Route(S + "/worlds", worlds_list, methods=["GET"]),

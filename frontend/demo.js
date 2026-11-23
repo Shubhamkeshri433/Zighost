@@ -33,8 +33,8 @@
       files: { '': [{ name: 'plugins', dir: true, size: 0, modified: now() - 900, editable: false }, { name: 'world', dir: true, size: 0, modified: now() - 60, editable: false }, { name: 'server.properties', dir: false, size: 1200, modified: now() - 7200, editable: true }, { name: 'paper.jar', dir: false, size: 48_000_000, modified: now() - 86400, editable: false }], plugins: [{ name: 'EssentialsX.jar', dir: false, size: 2_100_000, modified: now() - 900, editable: false }] },
     },
     backups: [
-      { name: '20261109-210000_manual.zip', size: 148_000_000, created: now() - 3600 * 3 },
-      { name: '20261108-183000_before-restore.zip', size: 141_000_000, created: now() - 86400 },
+      { name: '20261109-210000_manual.zip', size: 148_000_000, created: now() - 3600 * 3, scope: 'standard', version: '1.21.4', type: 'paper', damaged: false },
+      { name: '20261108-183000_before-restore.zip', size: 141_000_000, created: now() - 86400, scope: 'world', version: '1.20.6', type: 'paper', damaged: false },
     ],
   };
   window.MCP_DEMO_HISTORY = {
@@ -139,6 +139,13 @@
     }
     if ((m = p.match(/^\/api\/servers\/(\w+)$/)) && method === 'PATCH') { Object.assign(D.servers.find(s => s.id === m[1]), json); return { server: D.servers.find(s => s.id === m[1]) }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)\/icon$/)) && method !== 'GET') { const sv = D.servers.find(x => x.id === m[1]); if (sv) sv.icon = method === 'PUT' ? Date.now() : 0; return { icon: sv ? sv.icon : 0 }; }
+    if ((m = p.match(/^\/api\/servers\/(\w+)\/version$/)) && method === 'POST') {
+      const sv = D.servers.find(x => x.id === m[1]); D.install = { active: true, step: 'Downloading ' + json.version, percent: 20, error: '', server_id: sv.id };
+      const t = setInterval(() => { D.install.percent += 30; if (D.install.percent >= 100) { clearInterval(t); sv.version = json.version; D.install = { active: false, step: 'Done', percent: 100, error: '', server_id: sv.id }; } }, 600);
+      return { from: sv.version, to: json.version, downgrade: false, backup: !!json.backup };
+    }
+    if (p === '/api/servers/recover' && method === 'POST') return { servers: [], count: 0 };
+    if ((m = p.match(/^\/api\/servers\/(\w+)\/duplicate$/)) && method === 'POST') { const src = D.servers.find(x => x.id === m[1]); const c = { ...src, id: Math.random().toString(16).slice(2, 10), name: (json && json.name) || src.name + ' duplicate', port: src.port + 2, created: now() }; D.servers.push(c); return { server: c }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)$/)) && method === 'DELETE') { D.servers = D.servers.filter(s => s.id !== m[1]); return { ok: true }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)\/start$/))) { await demoStart(m[1]); return { ok: true }; }
     if (p === '/api/stop') { demoStop(); return { ok: true }; }
@@ -154,10 +161,18 @@
       if (method === 'PUT') { Object.assign(D.props, json.properties); return { ok: true }; }
       return { properties: { ...D.props }, running: D.state === 'online' };
     }
+    const BK = (D.bk = D.bk || { folder: '', scope: 'standard', on_stop: false, rules: { count: 10, days: 0, gb: 0 } });
+    const bkInfo = () => ({ backups: D.backups, folder: BK.folder || 'C:\\Users\\you\\AppData\\Roaming\\zighost\\backups\\demo', own_folder: BK.folder, shared_folder: '', scope: BK.scope, on_stop: BK.on_stop, rules: BK.rules, version: '1.21.4', type: 'paper', running: D.state !== 'offline' });
     if ((m = p.match(/^\/api\/servers\/(\w+)\/backups$/))) {
-      if (method === 'POST') { const b = { name: `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now() % 1e6}_manual.zip`, size: 150_000_000, created: now() }; D.backups.unshift(b); return { backup: b }; }
-      return { backups: D.backups };
+      if (method === 'POST') { const b = { name: `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now() % 1e6}_manual.zip`, size: 150_000_000, created: now(), scope: BK.scope, version: '1.21.4', type: 'paper', damaged: false }; D.backups.unshift(b); return { backup: { ...b, removed: [] } }; }
+      return bkInfo();
     }
+    if (p.endsWith('/backups/progress')) return { active: false, pct: 60, step: 'Packing worlds' };
+    if (p.endsWith('/backup-options')) { const o = json || {}; if ('folder' in o) BK.folder = o.folder; if (o.scope) BK.scope = o.scope; if ('on_stop' in o) BK.on_stop = o.on_stop; if (o.rules) BK.rules = o.rules; return bkInfo(); }
+    if (p === '/api/backup-folder/check') return { ok: true };
+    if (p.endsWith('/backups/import')) { D.backups.unshift({ name: '20250101-000000_imported.zip', size: 90_000_000, created: now(), scope: 'standard', damaged: false }); return { ok: true }; }
+    if (p.match(/\/backups\/[^/]+\/verify$/)) return { ok: true, files: 412 };
+    if (p.match(/\/backups\/[^/]+\/restore-new$/)) return { ok: true };
     if ((m = p.match(/^\/api\/servers\/(\w+)\/backups\/([^/]+)\/restore$/))) {
       if (D.state !== 'offline') err('Stop the server before restoring a backup.');
       return { ok: true };
@@ -182,6 +197,14 @@
     if (p.endsWith('/worlds/reset')) { if (D.state !== 'offline') err('Stop the server first.'); return { ok: true }; }
     if (p.endsWith('/worlds')) return { worlds: [{ name: 'world', size: 140_000_000, main: true }, { name: 'world_nether', size: 9_000_000 }, { name: 'world_the_end', size: 6_000_000 }], running: D.state === 'online' };
     if (p.endsWith('/plugins/search')) return { hits: ['LuckPerms', 'Vault', 'Dynmap', 'CoreProtect'].map((t, i) => ({ id: 'p' + i, slug: t.toLowerCase(), title: t, description: 'A popular plugin for your server.', icon: '', downloads: 1_000_000 - i * 150_000, author: 'author' + i })), total: 4, offset: 0 };
+    if (p.endsWith('/plugins/project')) return { id: 'p0', slug: 'luckperms', title: 'LuckPerms', summary: 'A permissions plugin for Minecraft servers.', icon: '', downloads: 1250000, followers: 4000, categories: ['utility', 'management'], license: 'MIT', gallery: [], links: { source: 'https://github.com/example/luckperms', wiki: 'https://example.com/wiki' }, minecraft: '1.21.4',
+      body: '# LuckPerms\n\nA **permissions** plugin. It is *fast* and easy to use.\n\n## Features\n\n- Groups and tracks\n- Web editor\n- Works with [Vault](https://example.com)\n\n`/lp editor` opens the editor.\n\n```\n/lp user Steve permission set build.place true\n```',
+      versions: [ { id: 'v3', number: '5.4.150', name: '5.4.150', type: 'release', game_versions: ['1.20.6', '1.21', '1.21.4'], loaders: ['paper', 'spigot'], date: '2026-10-12T10:00:00Z', downloads: 90000, changelog: '- Fixed a bug with groups\n- Faster startup', compatible: true, filename: 'LuckPerms-5.4.150.jar' },
+        { id: 'v2', number: '5.4.140', name: '5.4.140', type: 'release', game_versions: ['1.20.4', '1.20.6'], loaders: ['paper'], date: '2026-05-02T10:00:00Z', downloads: 150000, changelog: '', compatible: false, filename: 'LuckPerms-5.4.140.jar' },
+        { id: 'v1', number: '5.5.0-beta', name: '5.5.0 beta', type: 'beta', game_versions: ['1.21.4'], loaders: ['paper'], date: '2026-11-01T10:00:00Z', downloads: 2000, changelog: 'Beta build.', compatible: true, filename: 'LuckPerms-5.5.0-beta.jar' } ] };
+    if (p.endsWith('/plugins/check')) return { version: '1.21.4', counts: { update: 1, no_build: 1, unknown: 0, ok: 0 }, items: { 'EssentialsX.jar': { file: 'EssentialsX.jar', status: 'update', current: '2.20.1', latest: '2.21.0', project_id: 'p0' }, 'WorldEdit.jar.disabled': { file: 'WorldEdit.jar.disabled', status: 'no_build', note: 'No version for 1.21.4.', project_id: 'p1' } } };
+    if (p.endsWith('/plugins/update-all')) return { updated: [{ file: 'EssentialsX.jar', to: '2.21.0', requires: [] }], failed: [] };
+    if (p.endsWith('/plugins/update')) return { file: 'EssentialsX.jar', version: '2.21.0', changed: true, requires: [] };
     if (p.endsWith('/plugins/toggle')) { const x = D.plugins.find(q => q.file === json.file); if (x) x.enabled = json.enabled; return { ok: true }; }
     if (p.endsWith('/plugins/remove')) { D.plugins = D.plugins.filter(q => q.file !== json.file); return { ok: true }; }
     if (p.endsWith('/plugins/install')) { D.plugins.push({ file: json.project_id + '.jar', enabled: true, size: 800_000, title: json.project_id, version: '1.0', description: '' }); return { file: json.project_id + '.jar', version: '1.0', requires: [] }; }

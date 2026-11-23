@@ -5,6 +5,18 @@ const DEMO = !!(window.MCP_FORCE_DEMO || location.protocol === 'file:' || new UR
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
+/* The browser turns null into the text "null" in replaceChildren, append and the like. Skip empty values instead,
+   so `cond ? element : null` is always safe. */
+(() => {
+  const empty = x => x == null || x === false || x === true;
+  for (const name of ['replaceChildren', 'append', 'prepend']) {
+    for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+      const orig = proto[name];
+      proto[name] = function (...nodes) { return orig.apply(this, nodes.flat(2).filter(x => !empty(x))); };
+    }
+  }
+})();
+
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -118,6 +130,15 @@ function dialog({ title, text = '', ok = 'OK', danger = false, field = null }) {
 }
 const confirmBox = (title, text, ok = 'OK', danger = false) => dialog({ title, text, ok, danger });
 const promptBox = (title, label, value = '', ok = 'OK', text = '') => dialog({ title, text, ok, field: { label, value } });
+
+/* Ask for a folder (or a zip file): the system chooser inside the app window, a typed path in a browser. */
+async function pickPath(kind, current = '', title = 'Folder', label = 'Full path, for example D:\\Backups') {
+  const bridge = window.pywebview && window.pywebview.api;
+  const fn = bridge && (kind === 'zip' ? bridge.pick_zip : bridge.pick_folder);
+  if (fn) { const r = await (kind === 'zip' ? bridge.pick_zip() : bridge.pick_folder()); return r || null; }
+  const v = await promptBox(title, label, current, 'Use this');
+  return v && v.trim() ? v.trim() : null;
+}
 
 async function busy(btn, fn) {
   if (btn) btn.disabled = true;

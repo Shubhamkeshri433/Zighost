@@ -5,7 +5,7 @@ upgrade/uninstall working even when the display name changes."""
 import json
 
 NAME = "Zighost"                       # shown to people (placeholder name, may change)
-VERSION = "0.1.0"                      # stays 0.1.0 until the owner says otherwise
+VERSION = "0.1.1"
 PUBLISHER = "shubverser"               # brand / publisher
 PUBLISHER_NAME = "Shubham Keshri"      # legal person behind the publisher
 COPYRIGHT = "© 2026 Shubham Keshri"

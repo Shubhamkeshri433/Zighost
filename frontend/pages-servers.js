@@ -7,7 +7,8 @@ Pages.servers = {
   mount(el) {
     this.newBtn = h('button', { class: 'btn primary', onclick: () => this.open() }, ico('plus'), 'New server');
     this.list = h('div', { class: 'scards' });
-    el.append(h('div', { class: 'tools' }, this.newBtn), this.list);
+    this.findBtn = h('button', { class: 'btn icon-only', type: 'button', title: 'Reload: find servers on disk that are missing from this list', 'aria-label': 'Reload servers from disk', onclick: () => this.recover() }, ico('refresh'));
+    el.append(h('div', { class: 'tools' }, this.newBtn, this.findBtn), this.list);
   },
 
   async show() {
@@ -20,6 +21,14 @@ Pages.servers = {
     this.drawList();
   },
 
+  async recover() {
+    try {
+      const r = await busy(this.findBtn, () => api('/api/servers/recover', { method: 'POST', json: {} }));
+      if (r && r.count) { toast(r.count + ' server' + (r.count > 1 ? 's' : '') + ' recovered'); await refresh(); this.listSig = ''; this.drawList(); }
+      else if (r) toast('No missing servers found');
+    } catch (e) { fail(e); }
+  },
+
   /* ---------- cards ---------- */
   drawList() {
     const st = S.st, sig = JSON.stringify([st.servers, st.state, st.server && st.server.id, st.install, st.playit.address, st.players.length]);
@@ -30,7 +39,9 @@ Pages.servers = {
     const add = h('button', { class: 'scard new', type: 'button', onclick: () => this.open() }, ico('plus'), h('span', { text: 'New server' }));
     const empty = h('div', { class: 'card empty' }, h('h2', { text: 'No servers yet' }),
       h('p', { text: 'Create your first server in a few steps. Pick a type and version, give it a name and icon, and the panel does the rest.' }),
-      h('button', { class: 'btn primary', type: 'button', onclick: () => this.open() }, ico('plus'), 'Create your first server'));
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', type: 'button', onclick: () => this.open() }, ico('plus'), 'Create your first server'),
+        h('button', { class: 'btn icon-only', type: 'button', title: 'Reload: find servers on disk', 'aria-label': 'Reload servers from disk', onclick: () => this.recover() }, ico('refresh'))));
     this.list.replaceChildren(...(st.servers.length ? [...cards, add] : [empty]));
     this.newBtn.hidden = !st.servers.length;     // with no servers the card below has the only button
   },
@@ -49,7 +60,7 @@ Pages.servers = {
       try { await navigator.clipboard.writeText(st.playit.address); toast('Address copied.', 'ok'); } catch { toast(st.playit.address); } } },
       h('span', { text: st.playit.address }), ico('copy')) : null;
     const head = h('button', { class: 'scard-head', type: 'button', disabled: !s.installed, onclick: () => openServer(s.id) }, serverIcon(s),
-      h('div', { class: 'min0' }, h('div', { class: 'scard-name', text: s.name }), h('div', { class: 'scard-sub', text: `${cap(s.type)} ${s.version}` })));
+      h('div', { class: 'min0' }, h('div', { class: 'scard-name', text: s.name }), h('div', { class: 'scard-sub', text: `${cap(s.type)} ${s.version}` }), h('div', { class: 'scard-sub faintline', text: `${(s.ram_mb / 1024).toFixed(s.ram_mb % 1024 ? 1 : 0)} GB memory, port ${s.port}` })));
     const power = live
       ? h('button', { class: 'btn danger', type: 'button', disabled: st.state !== 'online', onclick: e => busy(e.currentTarget, async () => { await api('/api/stop', { method: 'POST' }); toast('Stopping. The world is saved first.'); await refresh(); }) }, ico('stop'), 'Stop')
       : h('button', { class: 'btn primary', type: 'button', disabled: !s.installed || !!act || st.install.active, title: act && !live ? 'Only one server can run at a time. Stop the running one first.' : '',
@@ -58,9 +69,15 @@ Pages.servers = {
       if (!await confirmBox(`Delete ${s.name}?`, 'Its world, plugins and all its backups are deleted. This cannot be undone.', 'Delete server', true)) return;
       busy(e.currentTarget, async () => { await api('/api/servers/' + s.id, { method: 'DELETE' }); toast('Server deleted.', 'ok'); await refresh(); this.listSig = ''; this.drawList(); });
     } }, ico('trash'));
+    const dup = h('button', { class: 'btn', type: 'button', 'aria-label': 'Duplicate ' + s.name, title: live ? 'Stop the server first' : 'Make a copy of this server',
+      disabled: live || installing || unfinished || st.install.active, onclick: async () => {
+        const n = await promptBox('Duplicate ' + s.name, 'Name of the copy', `${s.name} duplicate`.slice(0, 40), 'Duplicate');
+        if (!n) return;
+        busy(null, async () => { await api(`/api/servers/${s.id}/duplicate`, { method: 'POST', json: { name: n } }); toast('Copying the server. It gets its own port, and you can rename it in Settings.', 'ok'); await refresh(); });
+      } }, ico('copy'), 'Duplicate');
     return h('article', { class: 'scard' + (live ? ' live' : '') }, head, stateRow, bar, addr,
       h('div', { class: 'scard-actions' }, unfinished ? null : power,
-        h('button', { class: 'btn', type: 'button', disabled: !s.installed, onclick: () => openServer(s.id) }, 'Open'), h('span', { class: 'grow' }), del));
+        h('button', { class: 'btn', type: 'button', disabled: !s.installed, onclick: () => openServer(s.id) }, 'Open'), unfinished ? null : dup, h('span', { class: 'grow' }), del));
   },
 
   /* ---------- wizard ---------- */
