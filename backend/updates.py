@@ -32,7 +32,7 @@ def parse(v: str) -> tuple:
 UPDATE_DIR = DATA / "updates"
 PENDING = DATA / "update_pending.json"
 NOWINDOW = 0x08000000 if os.name == "nt" else 0
-DETACHED = 0x00000008 if os.name == "nt" else 0
+NEWGROUP = 0x00000200 if os.name == "nt" else 0   # CREATE_NEW_PROCESS_GROUP: lets the helper outlive this app
 ALLOWED_PREFIX = f"https://github.com/{brand.REPO}/releases/download/"
 NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 request_exit = None            # set by run.py: closes the app the same safe way as Quit (servers are stopped first)
@@ -185,7 +185,7 @@ def _batch(installer: Path, pid: int) -> Path:
         f'tasklist /FI "PID eq {int(pid)}" 2>nul | find "{int(pid)}" >nul',
         "if errorlevel 1 goto go",
         "set /a n+=1",
-        "if %n% GEQ 90 goto go",
+        "if %n% GEQ 40 goto go",
         "ping -n 2 127.0.0.1 >nul",
         "goto wait",
         ":go",
@@ -212,8 +212,9 @@ def install_apply() -> dict:
         raise UpdateError(str(e)) from e
     PENDING.write_text(json.dumps({"to": st["version"]}), encoding="utf-8")
     bat = _batch(installer, os.getpid())
+    # Never add the "detached process" flag here: it cancels CREATE_NO_WINDOW, so every tasklist/find/ping in the helper opened its own visible console.
     _set(state="installing")
-    subprocess.Popen(["cmd.exe", "/c", str(bat)], creationflags=NOWINDOW | DETACHED, close_fds=True,
+    subprocess.Popen(["cmd.exe", "/c", str(bat)], creationflags=NOWINDOW | NEWGROUP, close_fds=True,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if request_exit:
         threading.Thread(target=request_exit, daemon=True, name="update-exit").start()
