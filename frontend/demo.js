@@ -5,7 +5,7 @@
   const D = {
     consent: { accepted: true, version: 3, current: 3, accepted_at: now() - 86400, heads: false, updates: true },
     comp: { running: false, java: { state: 'missing', percent: 0, text: '' }, playit: { state: 'missing', percent: 0, text: '' } },
-    win: { autostart: false, keep_awake: true, toasts: true, transparent_window: true, glass_supported: true },
+    win: { autostart: false, keep_awake: true, toasts: true, glass_window: true, glass_supported: true },
     state: 'online', started: now() - 1860, active: 'a1b2c3d4', players: ['Aarav', 'CreeperKing', 'Steve_Rao'],
     servers: [
       { id: 'a1b2c3d4', name: 'Friends SMP', type: 'paper', version: '1.21.4', ram_mb: 2048, port: 25565, motd: 'Welcome to Friends SMP', installed: true, created: now() - 86400 * 9 },

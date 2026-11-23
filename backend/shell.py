@@ -5,6 +5,7 @@ and closing the window quits. run() returns False when neither exists so the cal
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import webbrowser
 from typing import Callable
@@ -214,6 +215,8 @@ class Shell:
                     self.splash.events.shown += close_native_splash      # hand over to the window of the same look
                 # The real window starts hidden and maximized (full screen area, not floating); people can restore it.
                 self.glass_on = bool(self.glass_wanted()) and winos.glass_supported()
+                if self.glass_on:
+                    os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00FFFFFF"     # WebView2 paints white unless told it may be clear
                 self.window = self.webview.create_window(brand.NAME, html="<body style='background:#10141d'></body>", hidden=True,
                                                          maximized=True, min_size=(980, 640), js_api=Api(), text_select=True,
                                                          transparent=self.glass_on)

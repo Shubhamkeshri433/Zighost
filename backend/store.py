@@ -39,7 +39,7 @@ DEFAULT_SETTINGS = {
     "last_active": "",
     "keep_awake": True,         # Windows: do not let the PC sleep while a server runs
     "toasts": True,             # Windows: tray notices when a server starts, stops or crashes
-    "transparent_window": True, # Windows 11: the window shows a blurred view of the desktop behind it (needs a restart)
+    "glass_window": False, # Windows 11, experimental: the window shows a blurred view of the desktop behind it (needs a restart)
 }
 SECRET_KEYS = ("playit_secret", "discord_webhook")      # encrypted on disk (Windows DPAPI)
 

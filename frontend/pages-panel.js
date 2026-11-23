@@ -30,7 +30,7 @@ Pages.panel = {
     return h('section', { class: 'card', style: 'margin-top:14px' }, h('div', { class: 'card-h' }, h('h2', { text: 'Windows' })),
       row('autostart', `Start ${BRAND.name} when I sign in to Windows`, 'It starts quietly in the tray. Only for your Windows user.'),
       row('keep_awake', 'Keep this PC awake while a server is running', 'Windows will not go to sleep and cut your friends off. It sleeps normally when no server runs.'),
-      this.win.glass_supported ? row('transparent_window', 'Transparent window', 'Shows a blurred view of your desktop behind the window. Restart ' + BRAND.name + ' to apply.') : null,
+      this.win.glass_supported ? row('glass_window', 'Transparent window (experimental)', 'Shows a blurred view of your desktop behind the window. Restart ' + BRAND.name + ' to apply. If anything looks wrong, turn it off.') : null,
       row('toasts', 'Show a notice when a server starts, stops or crashes', 'A small Windows notice from the tray icon. Player joins are never shown.'));
   },
 

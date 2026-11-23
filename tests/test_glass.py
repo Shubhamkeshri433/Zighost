@@ -21,8 +21,8 @@ class Glass(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(store, "DATA", __import__("pathlib").Path(d)):
             s = store.get_settings()
             self.assertEqual(s["theme"], "frost")
-            self.assertTrue(s["transparent_window"])
-            self.assertFalse(store.update_settings({"transparent_window": False})["transparent_window"])
+            self.assertFalse(s["glass_window"])
+            self.assertTrue(store.update_settings({"glass_window": True})["glass_window"])
             self.assertEqual(store.update_settings({"theme": "nope"})["theme"], "frost")
             self.assertEqual(store.update_settings({"theme": "nether"})["theme"], "nether")
 
@@ -41,6 +41,28 @@ class Glass(unittest.TestCase):
         calls.clear(); sh.glass_on = False
         sh._glass()
         self.assertEqual(calls, [])
+
+    def test_clear_webview_background_only_when_glass_is_on(self):
+        import threading
+        os.environ.pop("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", None)
+        made = {}
+
+        class W:   # a fake webview module: records the window it is asked for, then returns at once
+            class _E:
+                def __iadd__(self, f): return self
+            def create_window(self, *a, **k):
+                made.update(k); return SimpleNamespace(events=SimpleNamespace(loaded=W._E(), shown=W._E()), native=None, evaluate_js=lambda s: None)
+            def start(self, *a, **k): pass
+        for wanted, expect in ((False, False), (True, True)):
+            os.environ.pop("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", None)
+            sh = shell.Shell("http://x", on_quit=lambda: None, status=lambda: "", stop_servers=lambda: None, webview=W(), pystray=None, glass=lambda w=wanted: w)
+            with mock.patch.object(winos, "glass_supported", return_value=True):
+                try:
+                    sh.run()
+                except Exception:
+                    pass
+            self.assertEqual("WEBVIEW2_DEFAULT_BACKGROUND_COLOR" in os.environ, expect, wanted)
+        os.environ.pop("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", None)
 
     def test_closing_a_missing_native_splash_is_harmless(self):
         shell.close_native_splash()
