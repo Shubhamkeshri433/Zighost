@@ -144,6 +144,7 @@
       const t = setInterval(() => { D.install.percent += 30; if (D.install.percent >= 100) { clearInterval(t); sv.version = json.version; D.install = { active: false, step: 'Done', percent: 100, error: '', server_id: sv.id }; } }, 600);
       return { from: sv.version, to: json.version, downgrade: false, backup: !!json.backup };
     }
+    if (p === '/api/servers/recover' && method === 'POST') return { servers: [], count: 0 };
     if ((m = p.match(/^\/api\/servers\/(\w+)\/duplicate$/)) && method === 'POST') { const src = D.servers.find(x => x.id === m[1]); const c = { ...src, id: Math.random().toString(16).slice(2, 10), name: (json && json.name) || src.name + ' duplicate', port: src.port + 2, created: now() }; D.servers.push(c); return { server: c }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)$/)) && method === 'DELETE') { D.servers = D.servers.filter(s => s.id !== m[1]); return { ok: true }; }
     if ((m = p.match(/^\/api\/servers\/(\w+)\/start$/))) { await demoStart(m[1]); return { ok: true }; }

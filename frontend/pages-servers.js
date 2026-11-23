@@ -7,7 +7,8 @@ Pages.servers = {
   mount(el) {
     this.newBtn = h('button', { class: 'btn primary', onclick: () => this.open() }, ico('plus'), 'New server');
     this.list = h('div', { class: 'scards' });
-    el.append(h('div', { class: 'tools' }, this.newBtn), this.list);
+    this.findBtn = h('button', { class: 'btn', type: 'button', title: 'Look for server folders that are missing from this list', onclick: () => this.recover() }, 'Find servers on disk');
+    el.append(h('div', { class: 'tools' }, this.newBtn, this.findBtn), this.list);
   },
 
   async show() {
@@ -20,6 +21,14 @@ Pages.servers = {
     this.drawList();
   },
 
+  async recover() {
+    try {
+      const r = await busy(this.findBtn, () => api('/api/servers/recover', { method: 'POST', json: {} }));
+      if (r && r.count) { toast(r.count + ' server' + (r.count > 1 ? 's' : '') + ' recovered'); await refresh(); this.listSig = ''; this.drawList(); }
+      else if (r) toast('No missing servers found');
+    } catch (e) { fail(e); }
+  },
+
   /* ---------- cards ---------- */
   drawList() {
     const st = S.st, sig = JSON.stringify([st.servers, st.state, st.server && st.server.id, st.install, st.playit.address, st.players.length]);
@@ -30,7 +39,9 @@ Pages.servers = {
     const add = h('button', { class: 'scard new', type: 'button', onclick: () => this.open() }, ico('plus'), h('span', { text: 'New server' }));
     const empty = h('div', { class: 'card empty' }, h('h2', { text: 'No servers yet' }),
       h('p', { text: 'Create your first server in a few steps. Pick a type and version, give it a name and icon, and the panel does the rest.' }),
-      h('button', { class: 'btn primary', type: 'button', onclick: () => this.open() }, ico('plus'), 'Create your first server'));
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', type: 'button', onclick: () => this.open() }, ico('plus'), 'Create your first server'),
+        h('button', { class: 'btn', type: 'button', onclick: () => this.recover() }, 'Find servers on disk')));
     this.list.replaceChildren(...(st.servers.length ? [...cards, add] : [empty]));
     this.newBtn.hidden = !st.servers.length;     // with no servers the card below has the only button
   },

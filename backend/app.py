@@ -296,6 +296,13 @@ async def patch_server(request):
 
 
 @api
+async def recover_servers(request):
+    from . import recover
+    found = await run_in_threadpool(recover.recover)
+    return {"servers": found, "count": len(found)}
+
+
+@api
 async def duplicate_server(request):
     return {"server": await run_in_threadpool(manager.duplicate_server, sid_of(request),
                                                  str((await body(request)).get("name", "")))}
@@ -989,6 +996,7 @@ routes = [
     Route("/api/system", system),
     Route("/api/versions", versions),
     Route("/api/servers", create_server, methods=["POST"]),
+    Route("/api/servers/recover", recover_servers, methods=["POST"]),
     Route("/api/servers/{sid}/icon", get_icon, methods=["GET"]),
     Route("/api/servers/{sid}/icon", put_icon, methods=["PUT"]),
     Route("/api/servers/{sid}/icon", delete_icon, methods=["DELETE"]),
